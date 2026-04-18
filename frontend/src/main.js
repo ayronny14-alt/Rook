@@ -45,6 +45,10 @@ function createAmberIcon() {
 const IS_DEV = process.argv.includes('--dev') || process.env.ELECTRON_IS_DEV === '1';
 if (IS_DEV) console.log('[Rook] Running in DEV mode');
 
+// declare early so second-instance handler can reference it safely
+let mainWindow  = null;
+let tray        = null;
+
 // Prevent multiple Electron processes from launching simultaneously.
 // A second launch focuses the existing window instead of spawning a new backend.
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
@@ -241,8 +245,6 @@ const PIPE_NAME = '\\\\.\\pipe\\rook';
 
 let pipeClient  = null;
 let pipeBuffer  = '';
-let mainWindow  = null;
-let tray        = null;
 let pipeReady   = false;
 let pendingQueue = [];
 let retryDelay  = 200;

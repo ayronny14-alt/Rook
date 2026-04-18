@@ -30,12 +30,11 @@
     "copyright": "Copyright © 2025",
     "beforeBuild": "scripts/verify-backend.js",
     "files": [
-      "src/**/*",
-      "package.json",
+      "**/*",
       "!**/.env",
       "!**/.env.*",
       "!**/*.map",
-      "!**/node_modules/.cache",
+      "!**/node_modules/.cache/**",
       "!**/node_modules/**/{CHANGELOG.md,README.md,readme.md,CONTRIBUTING.md,LICENSE,license,*.d.ts,*.md,.github,.npmignore,tsconfig*,test,tests,__tests__,example,examples,docs,doc}"
     ],
     "asarUnpack": [],
