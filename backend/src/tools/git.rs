@@ -44,7 +44,10 @@ impl GitTool {
     pub async fn diff(&self, file_path: Option<&str>) -> Result<String> {
         let dir = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
         let mut cmd = tokio::process::Command::new("git");
-        hide_tokio(&mut cmd).arg("diff").arg("--stat").current_dir(&dir);
+        hide_tokio(&mut cmd)
+            .arg("diff")
+            .arg("--stat")
+            .current_dir(&dir);
         if let Some(fp) = file_path {
             cmd.arg("--").arg(fp);
         }

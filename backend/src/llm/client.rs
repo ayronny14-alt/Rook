@@ -457,10 +457,7 @@ impl LLMClient {
                     match self.get_remote_embedding(text).await {
                         Ok(v) => v,
                         Err(err) => {
-                            warn!(
-                                "Remote embedding failed ({}) — using native embedder",
-                                err
-                            );
+                            warn!("Remote embedding failed ({}) — using native embedder", err);
                             crate::memory::local_embed::embed(text)
                         }
                     }

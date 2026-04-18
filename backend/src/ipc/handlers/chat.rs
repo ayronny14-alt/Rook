@@ -19,14 +19,23 @@ const HISTORY_MAX_TOKENS: usize = 90_000;
 /// Best-effort provider tag from a base URL for the error log.
 fn detect_provider(base_url: &str) -> &'static str {
     let u = base_url.to_ascii_lowercase();
-    if u.contains("groq.com") { "groq" }
-    else if u.contains("openai.com") { "openai" }
-    else if u.contains("anthropic.com") { "anthropic" }
-    else if u.contains("mistral.ai") { "mistral" }
-    else if u.contains("together.") { "together" }
-    else if u.contains("deepseek.com") { "deepseek" }
-    else if u.contains("localhost") || u.contains("127.0.0.1") { "local" }
-    else { "unknown" }
+    if u.contains("groq.com") {
+        "groq"
+    } else if u.contains("openai.com") {
+        "openai"
+    } else if u.contains("anthropic.com") {
+        "anthropic"
+    } else if u.contains("mistral.ai") {
+        "mistral"
+    } else if u.contains("together.") {
+        "together"
+    } else if u.contains("deepseek.com") {
+        "deepseek"
+    } else if u.contains("localhost") || u.contains("127.0.0.1") {
+        "local"
+    } else {
+        "unknown"
+    }
 }
 
 /// Per-conversation session todo lists. The AI writes to this via the
@@ -349,12 +358,7 @@ pub async fn handle_chat(
                 );
                 for (i, item) in items.iter().take(5).enumerate() {
                     let title = item.title.chars().take(80).collect::<String>();
-                    hint.push_str(&format!(
-                        "{}. [{}] {}\n",
-                        i + 1,
-                        item.node_type,
-                        title
-                    ));
+                    hint.push_str(&format!("{}. [{}] {}\n", i + 1, item.node_type, title));
                 }
                 let nodes = serde_json::to_value(&items).unwrap_or(serde_json::Value::Null);
                 let struct_json = serde_json::json!({ "memory": nodes });
@@ -1880,7 +1884,11 @@ async fn handle_streaming_fallback(
             i,
             m.role,
             m.content.len(),
-            m.content.chars().take(100).collect::<String>().replace('\n', " ")
+            m.content
+                .chars()
+                .take(100)
+                .collect::<String>()
+                .replace('\n', " ")
         );
     }
 

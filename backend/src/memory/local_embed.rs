@@ -28,11 +28,10 @@ const NGRAM_MAX: usize = 4;
 
 // Stop words that add noise to similarity — dropped before hashing.
 const STOP: &[&str] = &[
-    "a", "an", "the", "and", "or", "but", "is", "are", "was", "were", "be",
-    "been", "being", "have", "has", "had", "do", "does", "did", "of", "in",
-    "on", "at", "to", "for", "with", "by", "as", "it", "this", "that", "these",
-    "those", "i", "you", "he", "she", "we", "they", "my", "your", "his", "her",
-    "our", "their", "so", "if", "then", "than", "which", "who", "what",
+    "a", "an", "the", "and", "or", "but", "is", "are", "was", "were", "be", "been", "being",
+    "have", "has", "had", "do", "does", "did", "of", "in", "on", "at", "to", "for", "with", "by",
+    "as", "it", "this", "that", "these", "those", "i", "you", "he", "she", "we", "they", "my",
+    "your", "his", "her", "our", "their", "so", "if", "then", "than", "which", "who", "what",
 ];
 
 /// Deterministic 384-d embedding for arbitrary text.
@@ -135,7 +134,11 @@ mod tests {
         let a = embed("rust is a systems programming language");
         let b = embed("rust is used for systems programming");
         let sim = cosine(&a, &b);
-        assert!(sim > 0.4, "similar texts should have sim > 0.4, got {}", sim);
+        assert!(
+            sim > 0.4,
+            "similar texts should have sim > 0.4, got {}",
+            sim
+        );
     }
 
     #[test]
@@ -143,7 +146,11 @@ mod tests {
         let a = embed("rust is a systems programming language");
         let b = embed("the cat sat on the mat");
         let sim = cosine(&a, &b);
-        assert!(sim < 0.3, "unrelated texts should have sim < 0.3, got {}", sim);
+        assert!(
+            sim < 0.3,
+            "unrelated texts should have sim < 0.3, got {}",
+            sim
+        );
     }
 
     #[test]
@@ -152,7 +159,11 @@ mod tests {
         let b = embed("runner finished race");
         let sim = cosine(&a, &b);
         // Char n-grams should catch "run" stem
-        assert!(sim > 0.1, "words sharing stems should have sim > 0.1, got {}", sim);
+        assert!(
+            sim > 0.1,
+            "words sharing stems should have sim > 0.1, got {}",
+            sim
+        );
     }
 
     #[test]

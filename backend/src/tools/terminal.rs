@@ -25,13 +25,10 @@ impl TerminalTool {
             .current_dir(&cwd)
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped());
-        let output = tokio::time::timeout(
-            Duration::from_secs(timeout_secs),
-            proc.output(),
-        )
-        .await
-        .map_err(|_| anyhow::anyhow!("Command timed out after {} seconds", timeout_secs))?
-        .map_err(|e| anyhow::anyhow!("Failed to spawn command: {}", e))?;
+        let output = tokio::time::timeout(Duration::from_secs(timeout_secs), proc.output())
+            .await
+            .map_err(|_| anyhow::anyhow!("Command timed out after {} seconds", timeout_secs))?
+            .map_err(|e| anyhow::anyhow!("Failed to spawn command: {}", e))?;
 
         let stdout = String::from_utf8_lossy(&output.stdout);
         let stderr = String::from_utf8_lossy(&output.stderr);

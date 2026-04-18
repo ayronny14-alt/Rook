@@ -78,7 +78,10 @@ pub fn preview_messages(messages: &[crate::llm::types::Message]) -> Vec<PromptPr
 /// swallowed silently — we never want logging to take down the main path.
 pub fn record(ctx: ErrorContext<'_>) {
     let timestamp = chrono_rfc3339();
-    let rec = Record { timestamp, ctx: &ctx };
+    let rec = Record {
+        timestamp,
+        ctx: &ctx,
+    };
 
     if let Ok(line) = serde_json::to_string(&rec) {
         if let Some(path) = error_log_path() {
@@ -118,10 +121,7 @@ fn chrono_rfc3339() -> String {
         .unwrap_or(0);
     // Minimal ISO-8601 without a chrono dep. Good enough for ordering.
     let (y, mo, d, h, mi, s) = unix_to_utc(now);
-    format!(
-        "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}Z",
-        y, mo, d, h, mi, s
-    )
+    format!("{:04}-{:02}-{:02}T{:02}:{:02}:{:02}Z", y, mo, d, h, mi, s)
 }
 
 // Plain Gregorian date computation for a Unix epoch second (no leap seconds).
@@ -135,7 +135,11 @@ fn unix_to_utc(secs: u64) -> (i32, u32, u32, u32, u32, u32) {
     // Shift epoch to 0000-03-01 so leap-day handling is uniform.
     // Algorithm: Howard Hinnant's date.
     let z = days + 719468;
-    let era = if z >= 0 { z / 146097 } else { (z - 146096) / 146097 };
+    let era = if z >= 0 {
+        z / 146097
+    } else {
+        (z - 146096) / 146097
+    };
     let doe = (z - era * 146097) as u64; // [0, 146096]
     let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
     let y = yoe as i64 + era * 400;
