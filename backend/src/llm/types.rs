@@ -208,6 +208,11 @@ pub struct ChatCompletionRequest {
     pub temperature: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub stream: Option<bool>,
+    /// Stable per-conversation id. OpenAI uses this for prompt-cache sharding;
+    /// other providers ignore the field. Setting it per conversation lets the
+    /// static system+tools portion reuse the cache across all turns.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub user: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

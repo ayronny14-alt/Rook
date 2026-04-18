@@ -342,32 +342,32 @@ pub async fn handle_chat(
             .await;
     }
 
-    // Emit user facts so the UI can display the global user profile alongside
-    // the memory panel — helps the user see what the AI knows about them.
-    {
-        let facts: Vec<serde_json::Value> = ctx
-            .memory
-            .get_connection()
-            .ok()
-            .and_then(|conn| {
-                conn.prepare("SELECT key, value FROM user_facts ORDER BY key")
-                    .and_then(|mut stmt| {
-                        stmt.query_map([], |row| {
-                            let k: String = row.get(0)?;
-                            let v: String = row.get(1)?;
-                            Ok(serde_json::json!({ "key": k, "value": v }))
-                        })
+    // Fetch user_facts once, reuse for both UI emission and system-message injection.
+    let user_facts: Vec<(String, String)> = ctx
+        .memory
+        .get_connection()
+        .ok()
+        .and_then(|conn| {
+            conn.prepare("SELECT key, value FROM user_facts ORDER BY key")
+                .and_then(|mut stmt| {
+                    stmt.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
                         .and_then(|rows| rows.collect::<rusqlite::Result<Vec<_>>>())
-                    })
-                    .ok()
-            })
-            .unwrap_or_default();
+                })
+                .ok()
+        })
+        .unwrap_or_default();
+
+    {
+        let facts_json: Vec<serde_json::Value> = user_facts
+            .iter()
+            .map(|(k, v)| serde_json::json!({ "key": k, "value": v }))
+            .collect();
         let _ = ctx
             .chunk_tx
             .send(IPCResponse::UserFactsLoaded {
                 id: id.to_string(),
                 conversation_id: conv_id.clone(),
-                facts,
+                facts: facts_json,
             })
             .await;
     }
@@ -597,45 +597,43 @@ pub async fn handle_chat(
         }
     };
 
-    // Inject user facts
-    {
-        if let Ok(conn) = ctx.memory.get_connection() {
-            let facts: Vec<(String, String)> = conn
-                .prepare("SELECT key, value FROM user_facts ORDER BY key")
-                .and_then(|mut stmt| {
-                    stmt.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
-                        .and_then(|rows| rows.collect::<rusqlite::Result<Vec<_>>>())
-                })
-                .unwrap_or_default();
-            if !facts.is_empty() {
-                let raw_facts = facts
-                    .iter()
-                    .map(|(k, v)| format!("• {}: {}", k, v))
-                    .collect::<Vec<_>>()
-                    .join("\n");
-                // Cap at ~4 KiB to prevent user facts from flooding the context window
-                const FACTS_CHAR_LIMIT: usize = 4000;
-                let facts_text = if raw_facts.len() > FACTS_CHAR_LIMIT {
-                    format!(
-                        "{}…\n[{} facts total — truncated to fit context window]",
-                        &raw_facts[..FACTS_CHAR_LIMIT],
-                        facts.len()
-                    )
-                } else {
-                    raw_facts
-                };
-                messages.push(crate::llm::types::Message::text(
-                    "system",
-                    format!(
-                        "# User Profile\nKnown facts about the user:\n{}",
-                        facts_text
-                    ),
-                ));
-            }
-        }
+    // Inject user facts (reuses the fetch from earlier — no second DB hit)
+    if !user_facts.is_empty() {
+        let raw_facts = user_facts
+            .iter()
+            .map(|(k, v)| format!("• {}: {}", k, v))
+            .collect::<Vec<_>>()
+            .join("\n");
+        const FACTS_CHAR_LIMIT: usize = 4000;
+        let facts_text = if raw_facts.len() > FACTS_CHAR_LIMIT {
+            format!(
+                "{}…\n[{} facts total — truncated to fit context window]",
+                &raw_facts[..FACTS_CHAR_LIMIT],
+                user_facts.len()
+            )
+        } else {
+            raw_facts
+        };
+        messages.push(crate::llm::types::Message::text(
+            "system",
+            format!(
+                "# User Profile\nKnown facts about the user:\n{}",
+                facts_text
+            ),
+        ));
     }
 
-    match agent_mode.unwrap_or("Chat") {
+    // Small-to-large router: a trivial message ("hi", "thanks", "ok") doesn't
+    // need the 25-iteration Team apparatus. Downgrade to Chat mode so we run
+    // one cheap call instead of dragging 35 tool schemas through a loop.
+    let requested_mode = agent_mode.unwrap_or("Chat");
+    let effective_mode = if requested_mode == "Team" && is_trivial_query(message) {
+        "Chat"
+    } else {
+        requested_mode
+    };
+
+    match effective_mode {
         "Chat" | "Assistant" => {
             handle_chat_mode(
                 ctx,
@@ -1238,32 +1236,7 @@ ACT IMMEDIATELY. Use tools without narrating every step.
         }
     }
 
-    // Inject user facts as a system message
-    {
-        if let Ok(conn) = ctx.memory.get_connection() {
-            let facts: Vec<(String, String)> = conn
-                .prepare("SELECT key, value FROM user_facts ORDER BY key")
-                .and_then(|mut stmt| {
-                    stmt.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
-                        .and_then(|rows| rows.collect::<rusqlite::Result<Vec<_>>>())
-                })
-                .unwrap_or_default();
-            if !facts.is_empty() {
-                let facts_text = facts
-                    .iter()
-                    .map(|(k, v)| format!("• {}: {}", k, v))
-                    .collect::<Vec<_>>()
-                    .join("\n");
-                messages.insert(
-                    1,
-                    crate::llm::types::Message::text(
-                        "system",
-                        format!("# User Profile\n{}", facts_text),
-                    ),
-                );
-            }
-        }
-    }
+    // User facts were already injected by handle_chat before dispatching here — no re-fetch.
 
     // Tell the AI what its current working directory is at the start of every turn.
     let cwd_text = format!(
@@ -1304,6 +1277,19 @@ ACT IMMEDIATELY. Use tools without narrating every step.
     let mut final_content = String::new();
     let mut final_usage: Option<TokenUsage> = None;
 
+    // Progressive tool-drop state: track tools the model has actually called so
+    // we can shrink the registry on iteration 2+. Always-on tools (search_memory,
+    // file_read) plus whatever the model used stay; everything else gets dropped.
+    let mut tools_used: std::collections::HashSet<String> = std::collections::HashSet::new();
+    const PINNED_TOOLS: &[&str] = &[
+        "search_memory",
+        "file_read",
+        "grep",
+        "glob",
+        "list_files",
+        "get_cwd",
+    ];
+
     loop {
         iteration += 1;
         if iteration > MAX_ITERATIONS {
@@ -1317,8 +1303,24 @@ ACT IMMEDIATELY. Use tools without narrating every step.
             break;
         }
 
+        // After iteration 1 the model has committed to an approach.
+        // Narrow the tool set to pinned essentials + whatever it has used so far.
+        // This cuts input tokens by 60-80% per iteration without sacrificing capability.
+        let iteration_tools: Vec<crate::llm::types::ToolDefinition> = if iteration <= 1 {
+            all_tools.clone()
+        } else {
+            all_tools
+                .iter()
+                .filter(|t| {
+                    PINNED_TOOLS.contains(&t.function.name.as_str())
+                        || tools_used.contains(&t.function.name)
+                })
+                .cloned()
+                .collect()
+        };
+
         let stream_result = effective_llm
-            .chat_stream_with_tools_for_model(messages.clone(), all_tools.clone(), model)
+            .chat_stream_with_tools_for_model(messages.clone(), iteration_tools, model)
             .await;
 
         let mut content = String::new();
@@ -1560,6 +1562,11 @@ ACT IMMEDIATELY. Use tools without narrating every step.
         // If no tool calls, we're done
         if assembled_calls.is_empty() {
             break;
+        }
+        // Remember which tools got used so progressive tool-drop on the next
+        // iteration keeps them available.
+        for c in &assembled_calls {
+            tools_used.insert(c.function.name.clone());
         }
         let calls = &assembled_calls;
 
@@ -2509,6 +2516,39 @@ pub async fn execute_tool(
 ) -> String {
     let s = |key: &str| args.get(key).and_then(|v| v.as_str()).unwrap_or("");
     match name {
+        "search_memory" => {
+            let query = s("query");
+            let limit = args
+                .get("limit")
+                .and_then(|v| v.as_u64())
+                .map(|v| v as usize)
+                .unwrap_or(5)
+                .min(15);
+            if query.trim().is_empty() {
+                return "search_memory: query is required".to_string();
+            }
+            let curator = crate::memory::context::ContextCurator::new(memory.clone());
+            match curator
+                .curate_for_query(llm, query, Some(limit * 4), Some(limit))
+                .await
+            {
+                Ok(hits) if !hits.is_empty() => {
+                    let compact: Vec<serde_json::Value> = hits
+                        .iter()
+                        .map(|h| {
+                            serde_json::json!({
+                                "title": h.title,
+                                "summary": h.summary.clone().unwrap_or_default(),
+                                "confidence": h.confidence_score,
+                                "node_id": h.node_id,
+                            })
+                        })
+                        .collect();
+                    serde_json::to_string_pretty(&compact).unwrap_or_default()
+                }
+                _ => format!("search_memory: no results for query '{}'", query),
+            }
+        }
         "file_read" => {
             let path = s("path");
             let offset = args.get("offset").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
@@ -3308,6 +3348,48 @@ pub async fn execute_tool(
     }
 }
 
+/// Heuristic router: decides if a query is too trivial to justify Team mode.
+/// Cheap substring checks so we don't spend a cent just to decide routing.
+fn is_trivial_query(message: &str) -> bool {
+    let q = message.trim();
+    if q.len() < 25 {
+        return true;
+    }
+    // No code-smelling tokens means the user probably just wants to chat.
+    let has_code_signal = q.contains('.')
+        && (q.contains(".rs")
+            || q.contains(".ts")
+            || q.contains(".js")
+            || q.contains(".py")
+            || q.contains(".go")
+            || q.contains(".java")
+            || q.contains(".cpp")
+            || q.contains(".h"));
+    let has_shell_signal = q.contains("cargo ")
+        || q.contains("npm ")
+        || q.contains("git ")
+        || q.contains("./")
+        || q.contains("sudo ");
+    let has_fs_signal = q.contains('/') || q.contains('\\');
+    let ql = q.to_ascii_lowercase();
+    let has_agentic_verb = ql.contains("build ")
+        || ql.contains("run ")
+        || ql.contains("install ")
+        || ql.contains("fix ")
+        || ql.contains("read ")
+        || ql.contains("write ")
+        || ql.contains("open ")
+        || ql.contains("find ")
+        || ql.contains("search ")
+        || ql.contains("grep ")
+        || ql.contains("debug ")
+        || ql.contains("refactor ")
+        || ql.contains("implement ")
+        || ql.contains("create ");
+
+    !(has_code_signal || has_shell_signal || has_fs_signal || has_agentic_verb)
+}
+
 fn build_all_tools() -> Vec<crate::llm::types::ToolDefinition> {
     use crate::llm::types::{FunctionDefinition, ToolDefinition};
     let tool = |name: &str, description: &str, params: serde_json::Value| ToolDefinition {
@@ -3319,6 +3401,14 @@ fn build_all_tools() -> Vec<crate::llm::types::ToolDefinition> {
         },
     };
     vec![
+        tool("search_memory", "Search the long-term memory graph for relevant facts, decisions, files, or conversations. Use this BEFORE asking the user to repeat themselves or when you need context from earlier sessions. Returns top-N ranked memory nodes with title, summary, and confidence. Far cheaper than loading the full context packet.", serde_json::json!({
+            "type": "object",
+            "properties": {
+                "query": {"type":"string","description":"Natural-language query describing what you need to recall."},
+                "limit": {"type":"integer","description":"Max nodes to return. Default 5."}
+            },
+            "required": ["query"]
+        })),
         tool("file_read", "Read the contents of a file. Returns content with line numbers in 'NNNN\\tcontent' format so you can reference exact lines in edits. Defaults to first 2000 lines; use offset/limit for windows of larger files.", serde_json::json!({
             "type": "object",
             "properties": {

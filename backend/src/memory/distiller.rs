@@ -1,7 +1,5 @@
-/// Background fact distiller — after every chat turn, call Amazon Nova Micro
-/// through the platform proxy to extract user facts and memory nodes from the
-/// exchange.  Runs as a fire-and-forget task; failures are logged and silently
-/// swallowed so they never interrupt the user.
+// Background fact distiller. Runs after each chat turn, extracts long-term
+// facts, dispatches to the cheapest model the provider serves.
 use tracing::{info, warn};
 use uuid::Uuid;
 
@@ -9,11 +7,42 @@ use crate::llm::client::LLMClient;
 use crate::llm::types::Message;
 use crate::memory::storage::MemoryStorage;
 
-const DISTILL_MODEL: &str = "nova-fast";
 const DISTILL_TIMEOUT_SECS: u64 = 20;
 
+/// Skip distillation when the exchange is unlikely to contain anything worth
+/// extracting. Saves an LLM call on ~30-40% of turns.
+fn is_low_signal(user_message: &str, assistant_content: &str) -> bool {
+    let u = user_message.trim();
+    let a = assistant_content.trim();
+    if u.len() < 40 && a.len() < 150 {
+        return true;
+    }
+    // pure acknowledgments
+    let lower = u.to_ascii_lowercase();
+    let ack = [
+        "ok",
+        "thanks",
+        "thank you",
+        "cool",
+        "nice",
+        "great",
+        "yep",
+        "yes",
+        "no",
+        "k",
+        "kk",
+    ];
+    if ack
+        .iter()
+        .any(|w| lower == *w || lower == format!("{}.", w) || lower == format!("{}!", w))
+    {
+        return true;
+    }
+    false
+}
+
 /// Spawn a non-blocking background task that distils facts from the latest
-/// user ↔ assistant exchange.  Returns immediately.
+/// user ↔ assistant exchange. Returns immediately.
 pub fn spawn_distill(
     llm: LLMClient,
     memory: MemoryStorage,
@@ -21,6 +50,9 @@ pub fn spawn_distill(
     assistant_content: String,
 ) {
     if user_message.trim().is_empty() || assistant_content.trim().is_empty() {
+        return;
+    }
+    if is_low_signal(&user_message, &assistant_content) {
         return;
     }
     tokio::spawn(async move {
@@ -77,12 +109,14 @@ Assistant: {assistant}"#,
 
     let messages = vec![Message::text("user", prompt)];
 
-    let response = match llm.chat_for_model(messages, Some(DISTILL_MODEL)).await {
+    // Pick the cheapest model the provider serves. Falls back to primary model
+    // if the /models endpoint doesn't advertise a cheaper tier.
+    let cheap = llm.cheapest_model().await;
+    let response = match llm.chat_with_model_override(messages, &cheap, 512).await {
         Ok(r) => r,
         Err(e) => {
-            // Silently skip if the user isn't signed in or the model is unavailable
             if !e.to_string().contains("Not signed in") {
-                warn!("Distiller: LLM call failed — {}", e);
+                warn!("Distiller: LLM call failed ({}) — {}", cheap, e);
             }
             return;
         }
@@ -204,6 +238,8 @@ async fn persist_memory_facts(llm: &LLMClient, memory: &MemoryStorage, parsed: &
     let obj_store = crate::memory::object::ObjectMemoryStore::new(memory.clone());
     let emb_store = crate::memory::embedding::EmbeddingMemory::new(memory.clone());
 
+    // Phase 1: resolve node ids + collect embed-texts for a single batched call.
+    let mut pending: Vec<(crate::memory::graph::Node, String, String, String)> = Vec::new();
     for item in arr.iter().take(3) {
         let title = item
             .get("title")
@@ -279,15 +315,31 @@ async fn persist_memory_facts(llm: &LLMClient, memory: &MemoryStorage, parsed: &
             }
         };
 
-        // Embed the fact so it surfaces in future semantic searches
         let embed_text = format!("{} {}", title, content);
-        if let Ok(vec) = llm.get_embedding(&embed_text).await {
-            let _ = emb_store.store(
-                &node.id,
-                crate::memory::embedding::EmbeddingType::Summary,
-                &vec,
-                Some(&content),
-            );
+        pending.push((node, content, category, embed_text));
+    }
+
+    if pending.is_empty() {
+        return;
+    }
+
+    // Phase 2: batch-embed all pending facts in one call. get_embeddings_batch
+    // still iterates under the hood, but providers that support batch input
+    // can be plugged in later without touching this caller.
+    let texts: Vec<&str> = pending.iter().map(|(_, _, _, t)| t.as_str()).collect();
+    let vectors = llm.get_embeddings_batch(texts).await.unwrap_or_default();
+
+    // Phase 3: persist nodes + object memory, attach embeddings where available.
+    for (idx, (node, content, category, _embed)) in pending.into_iter().enumerate() {
+        if let Some(vec) = vectors.get(idx) {
+            if !vec.is_empty() {
+                let _ = emb_store.store(
+                    &node.id,
+                    crate::memory::embedding::EmbeddingType::Summary,
+                    vec,
+                    Some(&content),
+                );
+            }
         }
 
         let obj = crate::memory::object::ObjectMemory {

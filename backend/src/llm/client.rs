@@ -61,6 +61,20 @@ fn ollama_base_url() -> String {
     format!("http://{}:{}/v1", host, port)
 }
 
+// Stable per-install id for the `user` field on chat requests. OpenAI uses this
+// to shard prompt caching; setting a consistent value means the cached system +
+// tools portion is reused across every turn in this install. The value is a
+// short hash of the api_key (so it differs per user but doesn't leak the key).
+fn install_user_id(api_key: &str) -> Option<String> {
+    if api_key.trim().is_empty() {
+        return None;
+    }
+    use sha2::{Digest, Sha256};
+    let digest = Sha256::digest(api_key.as_bytes());
+    let hex: String = digest[..8].iter().map(|b| format!("{:02x}", b)).collect();
+    Some(format!("rook-{}", hex))
+}
+
 impl LLMClient {
     pub fn new(config: LLMConfig) -> Self {
         let http_client = Client::builder()
@@ -91,6 +105,63 @@ impl LLMClient {
         &self.config
     }
 
+    /// Cheapest model available at the configured provider's /models endpoint.
+    /// Used to route auxiliary calls (distillation, auto-title, intent classifier)
+    /// off the user's primary paid model. Falls back to the primary model id if
+    /// the endpoint doesn't advertise a cheaper tier.
+    pub async fn cheapest_model(&self) -> String {
+        if let Some(m) = crate::llm::cheap_model::cheapest_model(
+            &self.http_client,
+            &self.config.base_url,
+            &self.config.api_key,
+        )
+        .await
+        {
+            return m;
+        }
+        self.config.model.clone()
+    }
+
+    /// Run a non-streaming chat completion against a specific model + no tools,
+    /// using the primary base_url / api_key. Used by auxiliary callers that
+    /// want to target the cheapest available model without rewriting routing.
+    pub async fn chat_with_model_override(
+        &self,
+        messages: Vec<Message>,
+        model: &str,
+        max_tokens: u32,
+    ) -> Result<ChatCompletionResponse> {
+        if self.config.api_key.trim().is_empty() {
+            return Ok(self.mock_chat_response(&messages, false));
+        }
+        let request = ChatCompletionRequest {
+            model: model.to_string(),
+            messages,
+            tools: None,
+            max_tokens: Some(max_tokens),
+            temperature: Some(0.2),
+            stream: Some(false),
+            user: install_user_id(&self.config.api_key),
+        };
+        let resp = self
+            .http_client
+            .post(format!("{}/chat/completions", self.config.base_url))
+            .header("Authorization", format!("Bearer {}", self.config.api_key))
+            .header("Content-Type", "application/json")
+            .timeout(std::time::Duration::from_secs(60))
+            .json(&request)
+            .send()
+            .await?;
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let body = resp.text().await.unwrap_or_default();
+            anyhow::bail!("LLM override returned {}: {}", status, body);
+        }
+        resp.json::<ChatCompletionResponse>()
+            .await
+            .context("override JSON parse")
+    }
+
     /// True when the active config has no API key — Chat returns deterministic
     /// mock responses. The frontend can use this to render a "MOCK" badge so
     /// users don't think bad outputs are bugs.
@@ -110,6 +181,7 @@ impl LLMClient {
             max_tokens: Some(self.config.max_tokens),
             temperature: Some(self.config.temperature),
             stream: Some(false),
+            user: install_user_id(&self.config.api_key),
         };
 
         let resp = self
@@ -150,6 +222,7 @@ impl LLMClient {
                 max_tokens: Some(self.config.max_tokens),
                 temperature: Some(self.config.temperature),
                 stream: Some(false),
+                user: None,
             };
 
             let resp = self
@@ -210,6 +283,7 @@ impl LLMClient {
             max_tokens: Some(self.config.max_tokens),
             temperature: Some(self.config.temperature),
             stream: Some(true),
+            user: install_user_id(&self.config.api_key),
         };
 
         let mut req = self
@@ -262,6 +336,7 @@ impl LLMClient {
             max_tokens: Some(self.config.max_tokens),
             temperature: Some(self.config.temperature),
             stream: Some(true),
+            user: None,
         };
 
         let mut req = self
@@ -323,6 +398,7 @@ impl LLMClient {
             max_tokens: Some(self.config.max_tokens),
             temperature: Some(self.config.temperature),
             stream: Some(false),
+            user: install_user_id(&self.config.api_key),
         };
 
         let mut req = self

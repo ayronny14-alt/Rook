@@ -20,7 +20,6 @@ use crate::memory::storage::MemoryStorage;
 
 const DEFAULT_MAX_PACKET_CHARS: usize = 6_000;
 const DEFAULT_ACTIVE_KEEP: usize = 4;
-const DEFAULT_MEMORY_TOPK: usize = 6;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ActiveWindow {
@@ -83,20 +82,30 @@ impl SlidingWindow {
         // Task window: surface a few task nodes (titles) from the graph if available.
         let task = self.assemble_task_window()?;
 
-        // Memory window: use existing ContextCurator to get ranked nodes.
-        let curator = ContextCurator::new(self.storage.clone());
-        let ranked = curator
-            .curate_for_query(
-                llm,
-                user_message,
-                Some(DEFAULT_MEMORY_TOPK * 8),
-                Some(DEFAULT_MEMORY_TOPK),
-            )
-            .await
-            .unwrap_or_default();
-
-        // Query-type routing: classify the query to bias retrieval
+        // Query-type routing: classify first so we can size the retrieval budget.
         let qtype = classify_query(user_message);
+
+        // Bounded retrieval budget — not every query needs 6 memory nodes.
+        // Trivia / greetings get zero; research / conceptual queries get the most.
+        let memory_topk = match (qtype, user_message.trim().len()) {
+            (_, len) if len < 12 => 0, // "hi", "thanks", one-word pings
+            (QueryType::Other, _) => 3,
+            (QueryType::Ui, _) => 3,
+            (QueryType::Troubleshoot, _) => 6,
+            (QueryType::Code, _) => 6,
+            (QueryType::Conceptual, _) => 8,
+        };
+
+        // Skip retrieval entirely when the budget is zero — saves an embedding call
+        // and all MMR work for throwaway messages.
+        let ranked = if memory_topk == 0 {
+            Vec::new()
+        } else {
+            ContextCurator::new(self.storage.clone())
+                .curate_for_query(llm, user_message, Some(memory_topk * 8), Some(memory_topk))
+                .await
+                .unwrap_or_default()
+        };
 
         // Recency boosting: collect recent node ids used in this conversation
         let recent_node_ids = if let Some(conv) = conversation_id {
@@ -160,7 +169,7 @@ impl SlidingWindow {
                 .partial_cmp(&a.total_score)
                 .unwrap_or(std::cmp::Ordering::Equal)
         });
-        boosted.truncate(DEFAULT_MEMORY_TOPK);
+        boosted.truncate(memory_topk.max(1));
 
         // Compress memory blocks
         let compressed = compress_ranked_nodes(&boosted);

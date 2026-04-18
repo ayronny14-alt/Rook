@@ -173,7 +173,9 @@ pub async fn auto_title_if_ready(
     );
 
     let messages = vec![crate::llm::types::Message::text("user", prompt)];
-    let title = match llm.chat(messages).await {
+    // Auto-title is a 6-word summarisation — use whichever cheap model the provider serves.
+    let cheap = llm.cheapest_model().await;
+    let title = match llm.chat_with_model_override(messages, &cheap, 64).await {
         Ok(resp) => {
             let raw = resp
                 .choices
