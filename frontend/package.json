@@ -1,6 +1,6 @@
 {
   "name": "rook",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Rook AI Assistant – Electron frontend",
   "main": "src/main.js",
   "scripts": {
@@ -68,7 +68,8 @@
     "publish": {
       "provider": "github",
       "owner": "ayronny14-alt",
-      "repo": "Rook"
+      "repo": "Rook",
+      "releaseType": "release"
     },
     "directories": {
       "output": "../dist"
