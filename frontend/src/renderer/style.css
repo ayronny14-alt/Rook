@@ -5,30 +5,35 @@
    DESIGN TOKENS
 ════════════════════════════════════════ */
 :root {
-  /* Surface hierarchy — cool-neutral dark */
-  --surface-0:  #0b0c0e;
-  --surface-1:  #111318;
-  --surface-2:  #171a20;
-  --surface-3:  #1e2229;
-  --surface-4:  #272d38;
-  --surface-5:  #333b47;
+  /* surface hierarchy — sidebar sits one step above main so the eye gets a
+     depth cue without any shadow. main area is the darkest, input row
+     borrows from main to read as its floor. */
+  --surface-main:   #0F141B;   /* main chat background */
+  --surface-sidebar:#131820;   /* sidebar, one step lighter */
+  --surface-0:      #0b0c0e;
+  --surface-1:      #111318;
+  --surface-2:      #171a20;
+  --surface-3:      #1e2229;
+  --surface-4:      #272d38;
+  --surface-5:      #333b47;
 
-  /* Borders — cool-tinted */
+  /* borders */
   --border-dim:    rgba(210,220,255,.06);
   --border-base:   rgba(210,220,255,.10);
   --border-strong: rgba(210,220,255,.16);
+  --border-top-lift: rgba(255,255,255,.035); /* inner-top highlight for depth */
 
-  /* Text — clean cool-neutral */
+  /* text */
   --text-primary:   #e2e8f4;
   --text-secondary: #8895b0;
   --text-muted:     #4a5268;
   --text-disabled:  #2c3244;
 
-  /* Accent — Rook blue */
-  --accent:        #4B7BEC;
-  --accent-hover:  #5D8EF0;
-  --accent-dim:    rgba(75,123,236,.11);
-  --accent-border: rgba(75,123,236,.30);
+  /* accent — amber / copper. one warm point in a cool palette. */
+  --accent:        #C86E3D;
+  --accent-hover:  #D7824F;
+  --accent-dim:    rgba(200,110,61,.11);
+  --accent-border: rgba(200,110,61,.32);
 
   /* Semantic */
   --color-green:  #4ade80;
@@ -365,8 +370,10 @@ body::before {
 
 #chat-sidebar {
   width: var(--sidebar-w); min-width: var(--sidebar-w);
-  background: var(--surface-0);
+  background: var(--surface-sidebar);
   border-right: 1px solid var(--border-base);
+  /* 1px top-inner highlight reads as "closer to viewer" without a real shadow */
+  box-shadow: inset 0 1px 0 var(--border-top-lift);
   display: flex; flex-direction: column; overflow: hidden;
 }
 
@@ -436,6 +443,39 @@ body::before {
 #sidebar-search::placeholder { color: var(--text-muted); }
 
 #conv-list-wrap { flex: 1; overflow-y: auto; }
+
+/* sidebar empty-state — looks like a real section, not a void */
+.conv-empty-hint {
+  list-style: none;
+  padding: 18px 14px 14px;
+  margin-top: 6px;
+}
+.conv-empty-label {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: .14em;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  margin-bottom: 10px;
+  padding-left: 2px;
+  display: flex; align-items: center; gap: 8px;
+}
+.conv-empty-label::before {
+  content: '';
+  width: 3px; height: 3px; border-radius: 50%;
+  background: var(--accent);
+  opacity: .6;
+  display: inline-block;
+}
+.conv-empty-body {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  line-height: 1.55;
+  padding: 10px 12px;
+  border: 1px dashed var(--border-dim);
+  border-radius: 5px;
+  background: rgba(255,255,255,.01);
+}
 #conversation-list { list-style: none; padding: 4px 8px; }
 #conversation-list li {
   display: flex; align-items: center; gap: 4px;
@@ -445,7 +485,10 @@ body::before {
   transition: background .12s, color .12s;
   margin: 1px 0; letter-spacing: .008em;
 }
-#conversation-list li:hover { background: var(--surface-2); color: var(--text-secondary); }
+#conversation-list li:hover {
+  background: rgba(200,110,61,.06);
+  color: var(--text-primary);
+}
 #conversation-list li.active {
   background: var(--surface-2); color: var(--text-primary);
   border-left: 2px solid var(--accent); padding-left: 8px;
@@ -534,12 +577,13 @@ body::before {
 #ctx-bar-fill.warn   { background: var(--color-amber); }
 #ctx-bar-fill.danger { background: var(--color-red);   }
 
-/* ── Messages ── */
+/* main chat container. darker than sidebar so the sidebar lifts above it. */
 #messages {
   flex: 1; overflow-y: auto; padding: 18px 0 14px;
   display: flex; flex-direction: column; scroll-behavior: smooth;
-  position: relative; /* anchor for scroll button */
-  background: var(--surface-0);
+  position: relative;
+  background: var(--surface-main);
+  box-shadow: inset 0 1px 0 var(--border-top-lift);
 }
 
 /* ── Scroll-to-bottom anchor ── */
@@ -807,13 +851,17 @@ pre { background: var(--surface-2); border-radius: var(--radius-md); border: 1px
 /* ════════════════════════════════════════
    INPUT AREA
 ════════════════════════════════════════ */
+/* input area anchors to the main pane — same background as #messages
+   so it reads as the floor of the chat container, not a floating island.
+   Narrow inner max-width is gone in favor of a near-full-width bar. */
 #input-area {
   display: flex; justify-content: center;
-  padding: 12px 0 18px; flex-shrink: 0;
+  padding: 10px 20px 16px; flex-shrink: 0;
   border-top: 1px solid var(--border-base);
-  background: var(--surface-0);
+  background: var(--surface-main);
+  box-shadow: inset 0 1px 0 var(--border-top-lift);
 }
-#input-center { width: 100%; max-width: 760px; padding: 0 32px; }
+#input-center { width: 100%; max-width: 1100px; }
 
 #input-box {
   display: flex; align-items: flex-end; gap: 8px;
@@ -830,6 +878,8 @@ pre { background: var(--surface-2); border-radius: var(--radius-md); border: 1px
 #chat-input {
   flex: 1; background: none; border: none;
   color: var(--text-primary);
+  /* amber caret — the one warm point in the input bar */
+  caret-color: var(--accent);
   font-family: var(--font-ui); font-size: 13.5px; font-weight: 400; line-height: 1.62;
   resize: none; outline: none; max-height: 200px; overflow-y: auto;
 }
@@ -983,41 +1033,71 @@ pre { background: var(--surface-2); border-radius: var(--radius-md); border: 1px
   animation: empty-fade-in .5s .2s cubic-bezier(.16,1,.3,1) both;
 }
 
-.empty-shortcuts {
-  display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-start;
-  padding-left: 20px;
-  animation: empty-fade-in .5s .28s cubic-bezier(.16,1,.3,1) both;
-}
-
-.shortcut-chip {
-  display: inline-flex; align-items: center; gap: 9px;
-  padding: 7px 14px 7px 10px;
-  border: 1px solid var(--border-base);
-  border-radius: 4px;
-  background: rgba(255,255,255,0.02);
-  font-family: var(--font-ui); font-size: 12px; font-weight: 400;
-  color: var(--text-secondary); cursor: pointer;
-  transition: border-color .15s, color .15s, background .15s, transform .15s;
-}
-.shortcut-chip:hover {
-  border-color: var(--accent-border);
-  color: var(--text-primary);
-  background: var(--accent-dim);
-  transform: translateY(-2px);
-}
-.shortcut-chip kbd {
-  font-family: var(--font-mono); font-size: 9px; font-weight: 500;
+/* inline keyboard hints — flat, not buttons. feels like linear/raycast. */
+.empty-kbd-hints {
+  display: block;
+  margin-top: 8px;
+  font-size: 11.5px;
   color: var(--text-muted);
-  background: rgba(255,255,255,0.05);
+  letter-spacing: .01em;
+}
+.empty-kbd-hints kbd {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-secondary);
+  background: transparent;
   border: 1px solid var(--border-dim);
   border-radius: 3px;
-  padding: 2px 6px;
-  letter-spacing: .04em;
+  padding: 1px 5px;
+  margin: 0 2px;
+  letter-spacing: .03em;
 }
-.shortcut-chip:hover kbd {
-  color: var(--accent);
+
+/* quick-action board — fills the center void with clickable Rook-specific entry points */
+.quick-board {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+  margin: 30px 20px 0 20px;
+  max-width: 780px;
+  animation: empty-fade-in .5s .28s cubic-bezier(.16,1,.3,1) both;
+}
+.qa-card {
+  background: rgba(255,255,255,.015);
+  border: 1px solid var(--border-base);
+  border-radius: 6px;
+  padding: 14px 16px;
+  text-align: left; cursor: pointer;
+  font-family: var(--font-ui);
+  transition: border-color .15s, background .15s, transform .15s;
+  position: relative;
+}
+.qa-card::before {
+  /* amber accent rail on the left, only on hover */
+  content: '';
+  position: absolute; left: 0; top: 12px; bottom: 12px; width: 2px;
+  background: var(--accent);
+  border-radius: 0 2px 2px 0;
+  opacity: 0;
+  transition: opacity .15s;
+}
+.qa-card:hover {
   border-color: var(--accent-border);
-  background: rgba(207,95,34,0.08);
+  background: rgba(200,110,61,.04);
+  transform: translateY(-1px);
+}
+.qa-card:hover::before { opacity: 1; }
+.qa-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+.qa-card:hover .qa-title { color: var(--accent-hover); }
+.qa-desc {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  line-height: 1.45;
 }
 
 @keyframes empty-fade-in {

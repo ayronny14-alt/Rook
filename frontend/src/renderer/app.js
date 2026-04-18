@@ -2012,13 +2012,20 @@ function clearMessages() {
   if (emptyState) { messagesEl.appendChild(emptyState); showEmptyState(); }
 }
 
-// Wire up shortcut chips inside the empty state
-document.querySelectorAll('.shortcut-chip').forEach(btn => {
+// quick-action board (fills the empty center). covers all six cards in index.html.
+document.querySelectorAll('.qa-card').forEach(btn => {
   btn.addEventListener('click', () => {
     const a = btn.dataset.action;
-    if (a === 'new-chat')          btnNewChat.click();
-    else if (a === 'open-palette') openPalette();
-    else if (a === 'go-memory')    switchPage('memory');
+    switch (a) {
+      case 'new-chat':        btnNewChat.click(); break;
+      case 'open-palette':    openPalette(); break;
+      case 'go-memory':       switchPage('memory'); break;
+      case 'browse-skills':   switchPage('plugins'); break;
+      case 'open-terminal':   chatInput.focus(); chatInput.value = '/terminal '; autoResize(); break;
+      case 'schedule-task':   handleScheduleCommand('/schedule'); break;
+      case 'index-folder':    chatInput.focus(); chatInput.value = 'index the folder '; autoResize(); break;
+      case 'import-memory':   switchPage('memory'); toast?.('Paste or drop your export in the memory panel.', 'info'); break;
+    }
   });
 });
 
@@ -2407,6 +2414,20 @@ fileInput?.addEventListener('change', async () => {
 function renderConvList(list) {
   const src = list || conversations;
   convList.innerHTML = '';
+
+  // Empty-state hint keeps the sidebar from feeling like a black column
+  // when there are no conversations yet.
+  if (!src.length) {
+    const empty = document.createElement('li');
+    empty.className = 'conv-empty-hint';
+    empty.innerHTML = `
+      <div class="conv-empty-label">Recent</div>
+      <div class="conv-empty-body">
+        Nothing yet. Start a chat and it'll show up here.
+      </div>`;
+    convList.appendChild(empty);
+    return;
+  }
 
   const pinned   = src.filter(c => c.pinned);
   const unpinned = src.filter(c => !c.pinned);

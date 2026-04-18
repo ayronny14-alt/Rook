@@ -164,18 +164,46 @@
           <!-- Context window usage bar — thin strip between header and messages -->
           <div id="ctx-bar-wrap"><div id="ctx-bar-fill"></div></div>
           <div id="messages">
-            <!-- Empty conversation state — shown when no messages exist -->
+            <!-- Empty state: tagline + quick-action board + ambient context -->
             <div id="empty-state" class="visible">
               <div class="empty-marker">
                 <span class="empty-marker-rule"></span>
                 <span>NEW SESSION</span>
               </div>
               <div class="empty-tagline">How can I help?</div>
-              <div class="empty-sub">Ask anything, explore your documents, or pick a shortcut below.</div>
-              <div class="empty-shortcuts">
-                <button class="shortcut-chip" data-action="new-chat"><kbd>Ctrl+N</kbd> <span>New chat</span></button>
-                <button class="shortcut-chip" data-action="open-palette"><kbd>Ctrl+K</kbd> <span>Commands</span></button>
-                <button class="shortcut-chip" data-action="go-memory"><kbd>Ctrl+/</kbd> <span>Memory</span></button>
+              <div class="empty-sub">
+                Ask anything, explore your documents, or jump in with one of these.
+                <span class="empty-kbd-hints">
+                  Press <kbd>Ctrl+N</kbd> for new chat · <kbd>Ctrl+K</kbd> for commands · <kbd>Ctrl+/</kbd> for memory
+                </span>
+              </div>
+
+              <!-- quick-action board — six cards that cover the center void -->
+              <div class="quick-board">
+                <button class="qa-card" data-action="index-folder">
+                  <div class="qa-title">Index a folder</div>
+                  <div class="qa-desc">Make a directory searchable in memory.</div>
+                </button>
+                <button class="qa-card" data-action="import-memory">
+                  <div class="qa-title">Import memory</div>
+                  <div class="qa-desc">Bring in notes, facts, or a prior export.</div>
+                </button>
+                <button class="qa-card" data-action="browse-skills">
+                  <div class="qa-title">Browse skills</div>
+                  <div class="qa-desc">Install plugins and MCP servers from GitHub.</div>
+                </button>
+                <button class="qa-card" data-action="open-terminal">
+                  <div class="qa-title">Open terminal</div>
+                  <div class="qa-desc">Run commands with Rook watching.</div>
+                </button>
+                <button class="qa-card" data-action="schedule-task">
+                  <div class="qa-title">Schedule a task</div>
+                  <div class="qa-desc">Wake Rook up on a cadence.</div>
+                </button>
+                <button class="qa-card" data-action="go-memory">
+                  <div class="qa-title">Recent context</div>
+                  <div class="qa-desc">What Rook currently knows about you.</div>
+                </button>
               </div>
             </div>
           </div>
