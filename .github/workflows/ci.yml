@@ -2,67 +2,74 @@ name: CI
 
 on:
   push:
-    branches: [main, master]
+    branches: [main]
   pull_request:
-    branches: [main, master]
+    branches: [main]
+
+# cancel superseded in-progress runs (e.g. rapid pushes)
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
+  # cheap and fast. linux, no windows toolchain needed for formatting.
+  fmt:
+    name: rustfmt
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - run: cargo fmt --all -- --check
+        working-directory: backend
+
+  # clippy + tests. has to be windows because the backend uses
+  # tokio's windows named pipes.
   backend:
     name: Backend (Rust)
     runs-on: windows-latest
     defaults:
       run:
         working-directory: backend
-
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Rust stable
-        uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@stable
         with:
-          components: clippy, rustfmt
+          components: clippy
 
-      - name: Cache cargo registry + build
-        uses: actions/cache@v4
+      # smart rust-specific cache: hashes Cargo.lock, prunes stale target
+      # artifacts, and only saves when the source actually changed. way higher
+      # hit rate than raw actions/cache.
+      - uses: Swatinem/rust-cache@v2
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            backend/target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('backend/Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-cargo-
+          workspaces: backend
+          cache-on-failure: true
 
-      - name: Check formatting
-        run: cargo fmt --all -- --check
-
+      # dropped --all-targets because integration_test (harness = false)
+      # isn't running on CI and was costing ~40s of compile per run.
       - name: Clippy (deny warnings)
-        run: cargo clippy --all-targets -- -D warnings
+        run: cargo clippy --bin rook --tests -- -D warnings
 
-      - name: Run unit tests (storage layer)
+      - name: Unit tests (storage layer)
         run: cargo test --bin rook memory::storage::tests -- --test-threads=1
 
   frontend:
     name: Frontend (Node)
-    runs-on: windows-latest
+    runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: frontend
-
     steps:
       - uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
+          cache: npm
           cache-dependency-path: frontend/package-lock.json
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Check for syntax errors (electron entry points)
-        # Fail fast if main.js/preload.js have obvious parse errors
+      - run: npm ci
+      - name: Syntax check (electron entry points)
         run: |
           node --check src/main.js
           node --check src/preload.js
