@@ -212,7 +212,7 @@ impl LLMClient {
         let is_local = model.map(is_local_model).unwrap_or(false);
 
         if is_local {
-            let model_name = model.unwrap();
+            let model_name = model.expect("is_local is true iff model is Some");
             let ollama_url = format!("{}/chat/completions", ollama_base_url());
 
             let request = ChatCompletionRequest {
@@ -262,7 +262,9 @@ impl LLMClient {
         let is_local = model.map(is_local_model).unwrap_or(false);
 
         let (use_model, base_url, api_key) = if is_local {
-            let m = model.unwrap().to_string();
+            let m = model
+                .expect("is_local is true iff model is Some")
+                .to_string();
             let url = ollama_base_url();
             (m, url, String::new())
         } else {
@@ -315,7 +317,9 @@ impl LLMClient {
         let is_local = model.map(is_local_model).unwrap_or(false);
 
         let (use_model, base_url, api_key) = if is_local {
-            let m = model.unwrap().to_string();
+            let m = model
+                .expect("is_local is true iff model is Some")
+                .to_string();
             let url = ollama_base_url();
             (m, url, String::new())
         } else {
@@ -377,7 +381,9 @@ impl LLMClient {
         let is_local = model.map(is_local_model).unwrap_or(false);
 
         let (use_model, base_url, api_key) = if is_local {
-            let m = model.unwrap().to_string();
+            let m = model
+                .expect("is_local is true iff model is Some")
+                .to_string();
             let url = ollama_base_url();
             (m, url, String::new())
         } else {

@@ -352,15 +352,33 @@ pub async fn handle_update_config(
     }
     if !api_key.trim().is_empty() {
         cfg.api_key = api_key.to_string();
+        // if embedding key was never set separately, keep it in sync
+        if cfg.embedding_api_key.trim().is_empty() {
+            cfg.embedding_api_key = api_key.to_string();
+        }
     }
     if !model.trim().is_empty() {
         cfg.model = model.to_string();
     }
     if let Ok(mut guard) = ctx.config_override.lock() {
-        *guard = Some(cfg);
+        *guard = Some(cfg.clone());
+    }
+    // survive backend restarts — write to %LOCALAPPDATA%\Rook\config.json
+    if let Err(e) = persist_config(&cfg) {
+        warn!("failed to persist config: {}", e);
     }
     Ok(IPCResponse::ConfigUpdated {
         id: id.to_string(),
         success: true,
     })
+}
+
+fn persist_config(cfg: &LLMConfig) -> anyhow::Result<()> {
+    let dir = dirs::data_local_dir()
+        .unwrap_or_else(|| std::path::PathBuf::from("."))
+        .join("Rook");
+    std::fs::create_dir_all(&dir)?;
+    let json = serde_json::to_string(cfg)?;
+    std::fs::write(dir.join("config.json"), json)?;
+    Ok(())
 }

@@ -2,6 +2,7 @@
 // in its own task (ReAct-style run with the task prompt), then reschedule
 // or archive based on cadence kind.
 
+use anyhow::Result;
 use chrono::Local;
 use std::time::Duration;
 use tracing::{info, warn};
@@ -27,7 +28,11 @@ pub fn spawn(memory: MemoryStorage, llm: LLMClient) {
                     for task in tasks {
                         let store = SchedulerStore::new(memory.clone());
                         let llm = llm.clone();
-                        tokio::spawn(async move { fire(store, llm, task).await });
+                        tokio::spawn(async move {
+                            if let Err(e) = fire(store, llm, task).await {
+                                warn!("scheduler fire error: {}", e);
+                            }
+                        });
                     }
                 }
                 Ok(_) => {}
@@ -37,7 +42,11 @@ pub fn spawn(memory: MemoryStorage, llm: LLMClient) {
     });
 }
 
-async fn fire(store: SchedulerStore, llm: LLMClient, task: crate::scheduler::store::ScheduledTask) {
+async fn fire(
+    store: SchedulerStore,
+    llm: LLMClient,
+    task: crate::scheduler::store::ScheduledTask,
+) -> Result<()> {
     info!("scheduler firing '{}' ({})", task.name, task.id);
 
     // run the prompt against the cheapest model to keep scheduled tasks light.
@@ -77,16 +86,9 @@ async fn fire(store: SchedulerStore, llm: LLMClient, task: crate::scheduler::sto
 
     // reschedule or archive
     match cadence::next_after(&task.cadence, Local::now()) {
-        Ok(next) => {
-            if let Err(e) = store.update_after_fire(&task.id, Some(next)) {
-                warn!("scheduler update failed for {}: {}", task.id, e);
-            }
-        }
-        Err(_) => {
-            // one-shot
-            if let Err(e) = store.update_after_fire(&task.id, None) {
-                warn!("scheduler archive failed for {}: {}", task.id, e);
-            }
-        }
+        Ok(next) => store.update_after_fire(&task.id, Some(next))?,
+        Err(_) => store.update_after_fire(&task.id, None)?, // one-shot
     }
+
+    Ok(())
 }

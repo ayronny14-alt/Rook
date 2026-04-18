@@ -23,6 +23,12 @@ use anyhow::Result;
 use tracing::{error, info};
 use tracing_subscriber::prelude::*;
 
+fn load_persisted_config() -> Option<llm::types::LLMConfig> {
+    let path = dirs::data_local_dir()?.join("Rook").join("config.json");
+    let json = std::fs::read_to_string(path).ok()?;
+    serde_json::from_str(&json).ok()
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     // ── Log file: %LOCALAPPDATA%\Rook\rook.log ────────────────────────
@@ -80,7 +86,7 @@ async fn main() -> Result<()> {
             .unwrap_or_else(|| std::path::PathBuf::from("gnn").join("train_graphsage.py"));
         let script_present = script_path.exists();
         let python_bin = std::env::var("ROOK_GNN_PYTHON").unwrap_or_else(|_| "python".to_string());
-        let python_present = std::process::Command::new(&python_bin)
+        let python_present = crate::os::hide(&mut std::process::Command::new(&python_bin))
             .arg("--version")
             .output()
             .map(|o| o.status.success())
@@ -101,8 +107,26 @@ async fn main() -> Result<()> {
         }
     }
 
-    // Initialize the LLM client
-    let llm_config = llm::types::LLMConfig::from_env();
+    // Initialize the LLM client — merge env defaults with any user-saved overrides
+    let llm_config = {
+        let mut cfg = llm::types::LLMConfig::from_env();
+        if let Some(saved) = load_persisted_config() {
+            // only overwrite fields the user actually set; empty strings stay as env defaults
+            if !saved.api_key.trim().is_empty() {
+                cfg.api_key = saved.api_key;
+            }
+            if !saved.base_url.trim().is_empty() {
+                cfg.base_url = saved.base_url;
+            }
+            if !saved.model.trim().is_empty() {
+                cfg.model = saved.model;
+            }
+            if !saved.embedding_api_key.trim().is_empty() {
+                cfg.embedding_api_key = saved.embedding_api_key;
+            }
+        }
+        cfg
+    };
     let llm_client = llm::client::LLMClient::new(llm_config);
     info!("LLM client initialized");
 
