@@ -21,14 +21,14 @@ jobs:
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Cache cargo
-        uses: actions/cache@v4
+      # rust-specific cache. hashes Cargo.lock, prunes stale target
+      # artifacts, re-saves only when source actually changed. on warm cache
+      # the release backend build drops from ~7min to ~30s.
+      - uses: Swatinem/rust-cache@v2
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            backend/target
-          key: ${{ runner.os }}-cargo-release-${{ hashFiles('backend/Cargo.lock') }}
+          workspaces: backend
+          cache-on-failure: true
+          shared-key: release-build
 
       # ── Electron frontend ─────────────────────────────────────────────────
       - name: Setup Node.js

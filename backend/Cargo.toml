@@ -103,3 +103,17 @@ ui-indexer = []
 browser-indexer = []
 task-tracker = []
 extra-tools = []
+
+# release profile tuned for compile speed on CI. the runtime cost of these
+# settings is negligible for an IPC server that spends most of its time
+# waiting on network + sqlite anyway.
+[profile.release]
+lto = false            # link-time optimization adds 30-90s; not worth it here
+codegen-units = 256    # more parallel codegen, tiny perf hit
+incremental = false    # ephemeral runners don't benefit from incremental
+debug = 0              # no debug symbols in prod
+strip = true           # smaller binary, no extra compile time
+
+# deps compile without debug info either
+[profile.release.package."*"]
+debug = false
