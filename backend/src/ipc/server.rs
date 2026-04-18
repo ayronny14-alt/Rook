@@ -610,6 +610,68 @@ async fn dispatch(request: &IPCRequest, ctx: &HandlerCtx) -> Result<IPCResponse>
 
         IPCRequest::GracefulShutdown { id } => handle_graceful_shutdown(ctx, id).await,
 
+        // scheduler
+        IPCRequest::ListScheduledTasks { id } => {
+            crate::ipc::handlers::scheduler::handle_list_scheduled_tasks(ctx, id).await
+        }
+        IPCRequest::CreateScheduledTask {
+            id,
+            name,
+            cadence,
+            prompt,
+            output_channel,
+        } => {
+            crate::ipc::handlers::scheduler::handle_create_scheduled_task(
+                ctx,
+                id,
+                name,
+                cadence,
+                prompt,
+                output_channel.as_deref(),
+            )
+            .await
+        }
+        IPCRequest::ApproveScheduledTask { id, task_id } => {
+            crate::ipc::handlers::scheduler::handle_set_status(
+                ctx,
+                id,
+                task_id,
+                crate::scheduler::TaskStatus::Active,
+                "approve",
+            )
+            .await
+        }
+        IPCRequest::CancelScheduledTask { id, task_id } => {
+            crate::ipc::handlers::scheduler::handle_set_status(
+                ctx,
+                id,
+                task_id,
+                crate::scheduler::TaskStatus::Archived,
+                "cancel",
+            )
+            .await
+        }
+        IPCRequest::PauseScheduledTask { id, task_id } => {
+            crate::ipc::handlers::scheduler::handle_set_status(
+                ctx,
+                id,
+                task_id,
+                crate::scheduler::TaskStatus::Paused,
+                "pause",
+            )
+            .await
+        }
+        IPCRequest::ResumeScheduledTask { id, task_id } => {
+            crate::ipc::handlers::scheduler::handle_set_status(
+                ctx,
+                id,
+                task_id,
+                crate::scheduler::TaskStatus::Active,
+                "resume",
+            )
+            .await
+        }
+
         IPCRequest::GetConversations { id } => handle_get_conversations(ctx, id).await,
 
         IPCRequest::SearchConversations { id, query } => {
@@ -887,6 +949,12 @@ fn extract_request_id(request: &IPCRequest) -> String {
         IPCRequest::UpdateConfig { id, .. } => id.clone(),
         IPCRequest::GetMemoryCapabilities { id } => id.clone(),
         IPCRequest::GracefulShutdown { id } => id.clone(),
+        IPCRequest::ListScheduledTasks { id } => id.clone(),
+        IPCRequest::CreateScheduledTask { id, .. } => id.clone(),
+        IPCRequest::ApproveScheduledTask { id, .. } => id.clone(),
+        IPCRequest::CancelScheduledTask { id, .. } => id.clone(),
+        IPCRequest::PauseScheduledTask { id, .. } => id.clone(),
+        IPCRequest::ResumeScheduledTask { id, .. } => id.clone(),
         IPCRequest::GetConversations { id } => id.clone(),
         IPCRequest::SearchConversations { id, .. } => id.clone(),
         IPCRequest::RegenerateLastMessage { id, .. } => id.clone(),

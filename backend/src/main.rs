@@ -7,11 +7,13 @@
 // Some handler types are complex by nature of the IPC protocol shape.
 #![allow(clippy::type_complexity)]
 
+mod computer_use;
 mod indexer;
 mod ipc;
 mod llm;
 mod memory;
 mod plugins;
+mod scheduler;
 mod skills;
 mod tools;
 use llm::orchestrator::GemmaOrchestrator;
@@ -158,6 +160,10 @@ async fn main() -> Result<()> {
     let file_indexer = indexer::file_indexer::FileIndexer::new(memory_system.clone());
     file_indexer.start_watching()?;
     info!("File indexer started");
+
+    // Fire up the scheduler tick loop. wakes due tasks every 60s.
+    scheduler::r#loop::spawn(memory_system.clone(), llm_client.clone());
+    info!("Scheduler loop started");
 
     // Start the IPC server (Named Pipes)
     let ipc_server =

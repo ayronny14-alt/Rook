@@ -446,6 +446,8 @@ api.onMessage((msg) => {
     case 'skills_list':           renderSkills(msg.skills);       break;
     case 'previews':              handlePreviews(msg.previews);   break;
     case 'preview_created':       openArtifact(msg.name, msg.content || ''); break;
+    case 'scheduled_task_list':   handleScheduledTaskList(msg);   break;
+    case 'scheduled_task_action': handleScheduledTaskAction(msg); break;
     case 'plugin_list':           handlePluginList(msg);          break;
     case 'plugin_action':         handlePluginAction(msg);        break;
     case 'gemma_launched':        handleGemmaLaunched(msg);       break;
@@ -927,6 +929,20 @@ function sendMessage() {
   const text = chatInput.value.trim();
   const hasImages = pendingImages.length > 0;
   if ((!text && !hasImages) || streaming) return;
+
+  // /schedule — intercepts before hitting the LLM.
+  // forms:
+  //   /schedule                                   -> opens modal
+  //   /schedule list                              -> asks backend for list
+  //   /schedule cancel <task_id>                  -> archive
+  //   /schedule "<name>" <cadence> "<prompt>"     -> inline create
+  // cadence grammar: in 2h | daily 09:00 | weekly mon 09:00 | every 15m | once YYYY-MM-DD HH:MM | cron <5-field>
+  if (text.startsWith('/schedule')) {
+    handleScheduleCommand(text);
+    chatInput.value = '';
+    autoResize();
+    return;
+  }
 
   const displayText = text || (hasImages ? `[${pendingImages.length} image${pendingImages.length > 1 ? 's' : ''} attached]` : '');
   const sendText    = text || '(Describe the attached image)';
@@ -3131,3 +3147,101 @@ document.getElementById('btn-index-folder')?.addEventListener('click', async () 
   if (dot)    dot.className = 'index-status-dot'; // pulsing
   api.send({ type: 'index_directory', id: uid(), path: folder });
 });
+
+// ==== /schedule slash command ====
+// lightweight modal + backend IPC for scheduled tasks.
+
+function handleScheduleCommand(text) {
+  const rest = text.slice('/schedule'.length).trim();
+
+  if (rest === '' ) return openScheduleModal();
+
+  if (rest === 'list') {
+    api.send({ type: 'list_scheduled_tasks', id: uid() });
+    appendMessage('assistant', 'fetching scheduled tasks...');
+    return;
+  }
+
+  const cancelMatch = rest.match(/^cancel\s+(\S+)/);
+  if (cancelMatch) {
+    api.send({ type: 'cancel_scheduled_task', id: uid(), task_id: cancelMatch[1] });
+    appendMessage('assistant', `cancelling ${cancelMatch[1]}...`);
+    return;
+  }
+
+  // inline form: /schedule "<name>" <cadence> "<prompt>"
+  const parts = rest.match(/"([^"]+)"\s+(.+?)\s+"([^"]+)"/);
+  if (parts) {
+    const [, name, cadence, prompt] = parts;
+    api.send({ type: 'create_scheduled_task', id: uid(), name, cadence, prompt });
+    appendMessage('assistant', `scheduling "${name}" (${cadence})...`);
+    return;
+  }
+
+  openScheduleModal();
+}
+
+function openScheduleModal() {
+  if (document.getElementById('schedule-modal-backdrop')) return;
+
+  const bd = document.createElement('div');
+  bd.id = 'schedule-modal-backdrop';
+  bd.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:9000;display:flex;align-items:center;justify-content:center';
+  bd.innerHTML = `
+    <div style="background:#1a1a1a;border:1px solid #333;border-radius:10px;padding:24px;width:480px;font-family:system-ui">
+      <h2 style="margin:0 0 4px;color:#e8e8e8;font-size:18px">Schedule a task</h2>
+      <p style="margin:0 0 18px;color:#888;font-size:13px">Rook will wake up and run this prompt on the cadence you pick.</p>
+      <label style="display:block;color:#ccc;font-size:12px;margin-bottom:4px">Name</label>
+      <input id="sch-name" style="width:100%;padding:8px;background:#0a0a0a;border:1px solid #333;border-radius:6px;color:#eee;margin-bottom:12px" placeholder="Morning briefing" />
+      <label style="display:block;color:#ccc;font-size:12px;margin-bottom:4px">Cadence</label>
+      <input id="sch-cadence" style="width:100%;padding:8px;background:#0a0a0a;border:1px solid #333;border-radius:6px;color:#eee;margin-bottom:4px" placeholder="daily 09:00" value="daily 09:00" />
+      <div style="color:#666;font-size:11px;margin-bottom:12px">
+        Examples: <code>daily 09:00</code> · <code>in 2h</code> · <code>weekly mon 09:00</code> · <code>every 15m</code> · <code>once 2026-05-01 14:00</code> · <code>cron 0 9 * * 1</code>
+      </div>
+      <label style="display:block;color:#ccc;font-size:12px;margin-bottom:4px">Prompt (what should Rook do?)</label>
+      <textarea id="sch-prompt" rows="4" style="width:100%;padding:8px;background:#0a0a0a;border:1px solid #333;border-radius:6px;color:#eee;margin-bottom:12px;resize:vertical" placeholder="Summarise any open PRs and overnight GitHub notifications."></textarea>
+      <label style="display:block;color:#ccc;font-size:12px;margin-bottom:4px">Output</label>
+      <select id="sch-channel" style="width:100%;padding:8px;background:#0a0a0a;border:1px solid #333;border-radius:6px;color:#eee;margin-bottom:20px">
+        <option value="notification">Desktop notification</option>
+        <option value="silent">Silent (log only)</option>
+      </select>
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        <button id="sch-cancel" style="padding:8px 16px;background:#222;border:1px solid #333;border-radius:6px;color:#ccc;cursor:pointer">Cancel</button>
+        <button id="sch-save" style="padding:8px 16px;background:#C86E3D;border:0;border-radius:6px;color:#111;cursor:pointer;font-weight:600">Schedule</button>
+      </div>
+    </div>`;
+  document.body.appendChild(bd);
+
+  const close = () => bd.remove();
+  bd.addEventListener('click', e => { if (e.target === bd) close(); });
+  document.getElementById('sch-cancel').onclick = close;
+  document.getElementById('sch-save').onclick = () => {
+    const name = document.getElementById('sch-name').value.trim();
+    const cadence = document.getElementById('sch-cadence').value.trim();
+    const prompt = document.getElementById('sch-prompt').value.trim();
+    const output_channel = document.getElementById('sch-channel').value;
+    if (!name || !cadence || !prompt) return;
+    api.send({ type: 'create_scheduled_task', id: uid(), name, cadence, prompt, output_channel });
+    close();
+    appendMessage('assistant', `scheduled "${name}" (${cadence}).`);
+  };
+  setTimeout(() => document.getElementById('sch-name')?.focus(), 50);
+}
+
+function handleScheduledTaskList(msg) {
+  const tasks = msg.tasks || [];
+  if (tasks.length === 0) {
+    appendMessage('assistant', 'no scheduled tasks.');
+    return;
+  }
+  const lines = tasks.map(t => {
+    const when = new Date((t.next_run_at || 0) * 1000).toLocaleString();
+    return `• **${t.name}** (\`${t.id.slice(0,8)}\`) — ${t.cadence} — next ${when} — ${t.status}`;
+  });
+  appendMessage('assistant', `Scheduled tasks:\n${lines.join('\n')}`);
+}
+
+function handleScheduledTaskAction(msg) {
+  const prefix = msg.success ? '' : 'fail: ';
+  appendMessage('assistant', `${prefix}${msg.action} — ${msg.message}`);
+}

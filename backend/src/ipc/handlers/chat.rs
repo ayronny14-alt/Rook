@@ -1245,16 +1245,15 @@ ACT IMMEDIATELY. Use tools without narrating every step.
     );
     messages.insert(1, crate::llm::types::Message::text("system", cwd_text));
 
-    // Gemini models (gemini*, flash*, vertex*) route through Vertex AI extended-thinking
-    // which requires thought_signature on every tool call block. Third-party gateways
-    // (e.g. Pollinations) strip those signatures, making multi-turn tool use impossible.
-    // Fall back to tool-less reasoning for these models so the session doesn't crash.
+    // Gemini / Vertex thought_signature continuity is handled by echoing the
+    // `reasoning` field back on every assistant turn (Message::reasoning is
+    // serialised to the provider). If the gateway strips that field, we fall
+    // back to tool-less reasoning for vertex/bard routes as a safety net.
     let effective_model_name = model
         .map(|s| s.to_ascii_lowercase())
         .unwrap_or_else(|| effective_llm.base_config().model.to_ascii_lowercase());
-    let tools_supported = !["gemini", "flash", "vertex", "bard"]
-        .iter()
-        .any(|kw| effective_model_name.contains(kw));
+    let tools_supported = !effective_model_name.contains("bard")
+        && std::env::var("ROOK_DISABLE_GEMINI_TOOLS").ok().as_deref() != Some("1");
 
     let all_tools = if tools_supported {
         build_all_tools()
@@ -1263,13 +1262,16 @@ ACT IMMEDIATELY. Use tools without narrating every step.
     };
 
     if !tools_supported {
-        let _ = ctx.chunk_tx.send(IPCResponse::ChatChunk {
-            id: id.to_string(),
-            token: format!(
-                "*Note: Tool calls are not supported with `{}` via this gateway — running in reasoning-only mode.*\n\n",
-                effective_model_name
-            ),
-        }).await;
+        let _ = ctx
+            .chunk_tx
+            .send(IPCResponse::ChatChunk {
+                id: id.to_string(),
+                token: format!(
+                    "*note: tool calls disabled for `{}` — reasoning-only mode.*\n\n",
+                    effective_model_name
+                ),
+            })
+            .await;
     }
 
     const MAX_ITERATIONS: usize = 25;
@@ -1503,7 +1505,7 @@ ACT IMMEDIATELY. Use tools without narrating every step.
                 .chunk_tx
                 .send(IPCResponse::ChatThinking {
                     id: id.to_string(),
-                    thinking: reasoning_buf,
+                    thinking: reasoning_buf.clone(),
                 })
                 .await;
         }
@@ -1573,8 +1575,16 @@ ACT IMMEDIATELY. Use tools without narrating every step.
         messages.push(crate::llm::types::Message {
             role: "assistant".to_string(),
             content: content.clone(),
-            content_blocks: None, // never replay extended-thinking blocks
+            content_blocks: None,
             tool_calls: Some(calls.clone()),
+            // Echo the accumulated reasoning back. Gemini 3 / Vertex OpenAI-compat
+            // requires thought_signature continuity between tool-call turns or it
+            // 400s; other providers ignore the field. Cheap to send either way.
+            reasoning: if reasoning_buf.is_empty() {
+                None
+            } else {
+                Some(serde_json::Value::String(reasoning_buf.clone()))
+            },
             ..Default::default()
         });
 
@@ -3344,6 +3354,180 @@ pub async fn execute_tool(
                 Err(e) => format!("Error: {}", e),
             }
         }
+        // ---------- computer use (windows only) ----------
+        "ui_snapshot" => {
+            let window = s("window");
+            let include_offscreen = args
+                .get("include_offscreen")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
+            let tree = if window.trim().is_empty() {
+                crate::computer_use::uia::snapshot_foreground(include_offscreen)
+            } else {
+                crate::computer_use::uia::snapshot_window(window)
+            };
+            let record_ok = tree.is_ok();
+            let body = match &tree {
+                Ok(v) => serde_json::to_string_pretty(v).unwrap_or_default(),
+                Err(e) => format!("ui_snapshot failed: {}", e),
+            };
+            if record_ok {
+                crate::computer_use::context::set_last_tree(conv_id, &body);
+            }
+            crate::computer_use::context::record(
+                conv_id,
+                crate::computer_use::ActionRecord {
+                    at: chrono::Utc::now().timestamp(),
+                    kind: "snapshot".to_string(),
+                    target: if window.is_empty() {
+                        "<foreground>".into()
+                    } else {
+                        window.to_string()
+                    },
+                    value: None,
+                    ok: record_ok,
+                    error: if record_ok { None } else { Some(body.clone()) },
+                },
+            );
+            let history = crate::computer_use::context::compact_summary(conv_id, 8);
+            if history.is_empty() {
+                body
+            } else {
+                format!("{}\n\n# Recent actions\n{}", body, history)
+            }
+        }
+        "ui_click" => {
+            let target = s("element_id");
+            let result = crate::computer_use::actions::click(target);
+            let ok = result.is_ok();
+            let err = result.as_ref().err().map(|e| e.to_string());
+            crate::computer_use::context::record(
+                conv_id,
+                crate::computer_use::ActionRecord {
+                    at: chrono::Utc::now().timestamp(),
+                    kind: "click".into(),
+                    target: target.to_string(),
+                    value: None,
+                    ok,
+                    error: err.clone(),
+                },
+            );
+            match result {
+                Ok(()) => format!("clicked {}", target),
+                Err(e) => format!("ui_click failed: {}", e),
+            }
+        }
+        "ui_type" => {
+            let target = s("element_id");
+            let text = s("text");
+            let result = crate::computer_use::actions::type_text(target, text);
+            let ok = result.is_ok();
+            let err = result.as_ref().err().map(|e| e.to_string());
+            crate::computer_use::context::record(
+                conv_id,
+                crate::computer_use::ActionRecord {
+                    at: chrono::Utc::now().timestamp(),
+                    kind: "type".into(),
+                    target: target.to_string(),
+                    value: Some(text.chars().take(60).collect()),
+                    ok,
+                    error: err.clone(),
+                },
+            );
+            match result {
+                Ok(()) => format!("typed into {}", target),
+                Err(e) => format!("ui_type failed: {}", e),
+            }
+        }
+        "ui_focus_window" => {
+            let title = s("title");
+            let result = crate::computer_use::actions::focus_window(title);
+            let ok = result.is_ok();
+            let err = result.as_ref().err().map(|e| e.to_string());
+            crate::computer_use::context::record(
+                conv_id,
+                crate::computer_use::ActionRecord {
+                    at: chrono::Utc::now().timestamp(),
+                    kind: "focus".into(),
+                    target: title.to_string(),
+                    value: None,
+                    ok,
+                    error: err.clone(),
+                },
+            );
+            match result {
+                Ok(()) => format!("focused {}", title),
+                Err(e) => format!("ui_focus_window failed: {}", e),
+            }
+        }
+        "ui_find" => {
+            let query = s("query");
+            match crate::computer_use::uia::find_element(query) {
+                Ok(v) => serde_json::to_string_pretty(&v).unwrap_or_default(),
+                Err(e) => format!("ui_find failed: {}", e),
+            }
+        }
+
+        // ---------- scheduler ----------
+        "schedule_task" | "propose_schedule" => {
+            let name = s("name");
+            let cadence = s("cadence");
+            let prompt = s("prompt");
+            let channel = args
+                .get("output_channel")
+                .and_then(|v| v.as_str())
+                .unwrap_or("notification")
+                .to_string();
+            let why = args.get("why").and_then(|v| v.as_str()).map(str::to_string);
+            if name.is_empty() || cadence.is_empty() || prompt.is_empty() {
+                return "schedule_task: name, cadence, and prompt are required".to_string();
+            }
+            match crate::scheduler::cadence::parse(cadence, chrono::Local::now()) {
+                Ok((next, _kind)) => {
+                    // both "schedule_task" and "propose_schedule" from the AI are
+                    // treated as AI-sourced for permission gating. user-initiated
+                    // schedules come in via the IPC path, not here.
+                    let source = crate::scheduler::TaskSource::Ai;
+                    let task = crate::scheduler::store::new_task(
+                        name.to_string(),
+                        cadence.to_string(),
+                        prompt.to_string(),
+                        channel,
+                        source,
+                        next,
+                        why,
+                    );
+                    let store = crate::scheduler::store::SchedulerStore::new(memory.clone());
+                    match store.insert(&task) {
+                        Ok(_) => format!(
+                            "scheduled task '{}' ({}) status={} next_run={}",
+                            task.name,
+                            task.id,
+                            task.status.as_str(),
+                            task.next_run_at
+                        ),
+                        Err(e) => format!("schedule_task insert failed: {}", e),
+                    }
+                }
+                Err(e) => format!("schedule_task: invalid cadence — {}", e),
+            }
+        }
+        "list_schedules" => {
+            let store = crate::scheduler::store::SchedulerStore::new(memory.clone());
+            match store.list(false) {
+                Ok(rows) => serde_json::to_string_pretty(&rows).unwrap_or_default(),
+                Err(e) => format!("list_schedules failed: {}", e),
+            }
+        }
+        "cancel_schedule" => {
+            let id = s("id");
+            let store = crate::scheduler::store::SchedulerStore::new(memory.clone());
+            match store.set_status(id, crate::scheduler::TaskStatus::Archived) {
+                Ok(_) => format!("cancelled schedule {}", id),
+                Err(e) => format!("cancel_schedule failed: {}", e),
+            }
+        }
+
         _ => format!("Unknown tool: {}", name),
     }
 }
@@ -3408,6 +3592,59 @@ fn build_all_tools() -> Vec<crate::llm::types::ToolDefinition> {
                 "limit": {"type":"integer","description":"Max nodes to return. Default 5."}
             },
             "required": ["query"]
+        })),
+
+        // -------- computer use (DOM-style) --------
+        tool("ui_snapshot", "Snapshot the accessibility tree of the foreground window (or a named one). Returns a JSON tree with stable element ids you can pass to ui_click / ui_type. Call this BEFORE every click so your ids match the current screen. Response also includes your last 8 UI actions so you remember what you already did.", serde_json::json!({
+            "type": "object",
+            "properties": {
+                "window": {"type":"string","description":"Optional substring of a window title (e.g. 'Notepad'). Omit to snapshot the foreground window."},
+                "include_offscreen": {"type":"boolean","description":"Include elements scrolled off screen. Default false to keep tokens low."}
+            }
+        })),
+        tool("ui_click", "Click an element by id from the most recent ui_snapshot. Uses UIA's Invoke pattern when available (more reliable than synthetic mouse).", serde_json::json!({
+            "type": "object",
+            "properties": { "element_id": {"type":"string","description":"ID from the most recent ui_snapshot (e.g. 'e42')."} },
+            "required": ["element_id"]
+        })),
+        tool("ui_type", "Type text into an element by id (typically an edit/value control). Prefers the Value pattern, falls back to keyboard simulation with focus.", serde_json::json!({
+            "type": "object",
+            "properties": {
+                "element_id": {"type":"string"},
+                "text": {"type":"string"}
+            },
+            "required": ["element_id","text"]
+        })),
+        tool("ui_focus_window", "Bring a window to the foreground by title substring. Snapshot again after focusing to get a fresh tree.", serde_json::json!({
+            "type": "object",
+            "properties": { "title": {"type":"string","description":"Substring match on window title."} },
+            "required": ["title"]
+        })),
+        tool("ui_find", "Search the most recent snapshot's registry for elements whose name contains the query. Useful when you want to click 'the OK button' without knowing the id.", serde_json::json!({
+            "type": "object",
+            "properties": { "query": {"type":"string"} },
+            "required": ["query"]
+        })),
+
+        // -------- scheduler --------
+        tool("propose_schedule", "Propose a scheduled task for the user to approve. Use when you think Rook should wake up later and do something (e.g. 'every monday summarize PRs'). Cadence grammar: 'once YYYY-MM-DD HH:MM', 'in 2h', 'daily 09:00', 'weekly mon 09:00', 'every 15m', 'cron 0 9 * * 1'. Status starts as 'proposed' — user must approve before it fires.", serde_json::json!({
+            "type": "object",
+            "properties": {
+                "name": {"type":"string","description":"Short human-readable name."},
+                "cadence": {"type":"string","description":"Cadence spec — see tool description."},
+                "prompt": {"type":"string","description":"What Rook should do when the task fires."},
+                "output_channel": {"type":"string","enum":["notification","silent"],"description":"How to deliver the result. Default notification."},
+                "why": {"type":"string","description":"Short reason the task is useful. Shown to the user when they approve."}
+            },
+            "required": ["name","cadence","prompt"]
+        })),
+        tool("list_schedules", "List all non-archived scheduled tasks. Returns JSON array with id, name, cadence, next_run_at, status.", serde_json::json!({
+            "type": "object", "properties": {}
+        })),
+        tool("cancel_schedule", "Archive a scheduled task by id so it stops firing.", serde_json::json!({
+            "type": "object",
+            "properties": { "id": {"type":"string"} },
+            "required": ["id"]
         })),
         tool("file_read", "Read the contents of a file. Returns content with line numbers in 'NNNN\\tcontent' format so you can reference exact lines in edits. Defaults to first 2000 lines; use offset/limit for windows of larger files.", serde_json::json!({
             "type": "object",

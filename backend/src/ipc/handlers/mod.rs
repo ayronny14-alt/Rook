@@ -4,6 +4,7 @@ pub mod conversations;
 pub mod git;
 pub mod memory;
 pub mod plugins;
+pub mod scheduler;
 pub mod tools;
 
 use std::collections::HashMap;

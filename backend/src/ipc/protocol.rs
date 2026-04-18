@@ -239,6 +239,34 @@ pub enum IPCRequest {
     GracefulShutdown {
         id: String,
     },
+    // scheduler
+    ListScheduledTasks {
+        id: String,
+    },
+    CreateScheduledTask {
+        id: String,
+        name: String,
+        cadence: String,
+        prompt: String,
+        #[serde(default)]
+        output_channel: Option<String>,
+    },
+    ApproveScheduledTask {
+        id: String,
+        task_id: String,
+    },
+    CancelScheduledTask {
+        id: String,
+        task_id: String,
+    },
+    PauseScheduledTask {
+        id: String,
+        task_id: String,
+    },
+    ResumeScheduledTask {
+        id: String,
+        task_id: String,
+    },
     /// List all conversations stored in SQLite.
     GetConversations {
         id: String,
@@ -352,6 +380,17 @@ pub enum IPCRequest {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum IPCResponse {
+    ScheduledTaskList {
+        id: String,
+        tasks: Vec<serde_json::Value>,
+    },
+    ScheduledTaskAction {
+        id: String,
+        task_id: String,
+        action: String,
+        success: bool,
+        message: String,
+    },
     Chat {
         id: String,
         conversation_id: String,

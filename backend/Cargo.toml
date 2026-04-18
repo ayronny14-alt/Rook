@@ -77,6 +77,25 @@ regex = "1.12.3"
 walkdir = "2.5.0"
 similar = "2.4"
 
+# Desktop notifications (toast)
+notify-rust = "4.11"
+
+# Clipboard read/write
+arboard = "3.4"
+
+# Cron parsing for scheduler
+croner = "3.0"
+
+# Windows UI Automation (accessibility tree, DOM-style computer use).
+# Windows-only; the crate itself ignores non-windows targets.
+[target.'cfg(windows)'.dependencies]
+uiautomation = "0.19"
+windows = { version = "0.58", features = [
+    "Win32_Foundation",
+    "Win32_UI_WindowsAndMessaging",
+    "Win32_UI_Input_KeyboardAndMouse",
+] }
+
 [features]
 # Optional components that are not required for the core backend runtime.
 # Enable selectively when developing UI/indexers/tools.

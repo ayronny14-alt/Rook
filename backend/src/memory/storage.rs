@@ -211,6 +211,28 @@ CREATE TABLE IF NOT EXISTS user_facts (
 );
 
 -- ============================================================
+-- SCHEDULED TASKS
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS scheduled_tasks (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    cadence TEXT NOT NULL,
+    prompt TEXT NOT NULL,
+    output_channel TEXT NOT NULL DEFAULT 'notification',
+    status TEXT NOT NULL DEFAULT 'active',
+    created_by TEXT NOT NULL DEFAULT 'user',
+    last_run_at INTEGER,
+    next_run_at INTEGER NOT NULL,
+    run_count INTEGER NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+    why TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_next ON scheduled_tasks(next_run_at);
+CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_status ON scheduled_tasks(status);
+
+-- ============================================================
 -- TOOL AUDIT LOG
 -- ============================================================
 

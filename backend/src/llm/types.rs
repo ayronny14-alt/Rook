@@ -126,6 +126,13 @@ pub struct Message {
     /// Required on role:"tool" messages — must match the tool_call id.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tool_call_id: Option<String>,
+    /// Raw reasoning payload returned by the model on the previous turn.
+    /// Gemini 3 / Vertex thought-signature round-trip requires this to be
+    /// echoed back on every subsequent assistant turn that has tool calls,
+    /// otherwise the provider 400s. Providers that don't use it ignore the
+    /// field.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reasoning: Option<serde_json::Value>,
 }
 
 impl serde::Serialize for Message {
@@ -138,11 +145,14 @@ impl serde::Serialize for Message {
         if self.tool_call_id.is_some() {
             len += 1;
         }
+        if self.reasoning.is_some() {
+            len += 1;
+        }
 
         let mut map = serializer.serialize_map(Some(len))?;
         map.serialize_entry("role", &self.role)?;
         match &self.content_blocks {
-            // Replay raw blocks (thinking + text + tool_use) so Vertex AI
+            // replay raw blocks (thinking + text + tool_use) so vertex ai
             // extended-thinking thought_signatures are preserved.
             Some(blocks) => map.serialize_entry("content", blocks)?,
             None => map.serialize_entry("content", &self.content)?,
@@ -152,6 +162,9 @@ impl serde::Serialize for Message {
         }
         if let Some(id) = &self.tool_call_id {
             map.serialize_entry("tool_call_id", id)?;
+        }
+        if let Some(r) = &self.reasoning {
+            map.serialize_entry("reasoning", r)?;
         }
         map.end()
     }
