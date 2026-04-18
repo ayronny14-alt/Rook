@@ -1,0 +1,86 @@
+[package]
+name = "rook-backend"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "rook"
+path = "src/main.rs"
+
+[[test]]
+name = "integration_test"
+path = "tests/integration_test.rs"
+harness = false
+
+[dependencies]
+# Async runtime
+tokio = { version = "1.35", features = ["full"] }
+async-trait = "0.1"
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+serde_yaml = "0.9"
+
+# Database
+rusqlite = { version = "0.30", features = ["bundled"] }
+r2d2 = "0.8"
+r2d2_sqlite = "0.23"
+
+# Embeddings (local or remote)
+reqwest = { version = "0.11", features = ["json", "stream"] }
+url = "2.5"
+
+# Named Pipes (Windows IPC)
+tokio-util = { version = "0.7", features = ["compat", "rt"] }
+futures = "0.3"
+
+# File watching
+notify = "6.1"
+
+# Web search
+scraper = "0.18"
+# html2text = "0.6"
+# Browser automation (CDP)
+headless_chrome = "1.0"
+
+# UUID generation
+uuid = { version = "1.6", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+
+# Error handling
+anyhow = "1.0"
+thiserror = "1.0"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-appender = "0.2"
+
+# Directories
+dirs = "5.0"
+path-clean = "1.0"
+
+# Similarity search (for embeddings)
+ndarray = "0.15"
+simba = "0.8"
+
+# SHA256 hashing
+sha2 = "0.10"
+
+# URL encoding
+urlencoding = "2.1"
+base64 = "0.21"
+sysinfo = "0.28"
+glob = "0.3.3"
+regex = "1.12.3"
+walkdir = "2.5.0"
+similar = "2.4"
+
+[features]
+# Optional components that are not required for the core backend runtime.
+# Enable selectively when developing UI/indexers/tools.
+ui-indexer = []
+browser-indexer = []
+task-tracker = []
+extra-tools = []

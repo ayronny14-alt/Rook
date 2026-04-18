@@ -1,0 +1,805 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Rook</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,300;12..96,400;12..96,500;12..96,600&family=DM+Serif+Display:ital@0;1&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="style.css"/>
+  <!-- Syntax highlighting — dark theme matching the app palette -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.10.0/styles/atom-one-dark.min.css" crossorigin="anonymous" integrity="sha512-Jk4AqjWsdSzSWCSuQTfYRIF84Rq/eV0G2+tu07byYwHcbTGfdmLrHjUSwvzp5HvbiqK4ibmNwdcG49Y5RGYPTg==" />
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════════════
+     STARTUP OVERLAY — shown while backend boots
+═══════════════════════════════════════════════════ -->
+<div id="startup-overlay">
+  <div id="startup-box">
+    <div id="startup-marker">— LOADING WORKSPACE</div>
+    <div id="startup-title">Rook</div>
+    <div id="startup-status">
+      <span class="live-dot" aria-hidden="true"></span>
+      <span id="startup-status-text">Starting backend</span>
+    </div>
+    <div id="startup-steps" class="hidden"></div>
+    <div id="startup-log-wrap"><div id="startup-log"></div></div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════
+     ONBOARDING OVERLAY — shown on first launch if not signed in
+═══════════════════════════════════════════════════ -->
+<div id="onboarding-overlay" class="hidden">
+  <div id="onboarding-box">
+    <div id="onboarding-wordmark">Rook</div>
+    <div id="onboarding-tagline">— connect your account to get started</div>
+    <p id="onboarding-body">
+      Sign in with your SVRN account to access AI models, usage tracking,
+      and automatic configuration — no API keys needed.
+    </p>
+    <div id="onboarding-actions">
+      <button id="btn-onboard-signin" class="onboard-btn-primary">Sign in with SVRN</button>
+      <button id="btn-onboard-skip"   class="onboard-btn-skip">Use custom API key →</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════
+     MAIN APP
+═══════════════════════════════════════════════════ -->
+<div id="app" class="hidden">
+
+  <!-- Custom titlebar -->
+  <div id="titlebar">
+    <div id="titlebar-drag">
+      <svg width="16" height="16" viewBox="0 0 48 48" fill="none">
+        <circle cx="24" cy="24" r="22" stroke="#C86E3D" stroke-width="3"/>
+        <path d="M14 24h20M24 14v20" stroke="#C86E3D" stroke-width="3" stroke-linecap="round"/>
+      </svg>
+      <span>Rook</span>
+    </div>
+    <div id="win-controls">
+      <button class="wbtn" id="btn-min">&#8722;</button>
+      <button class="wbtn" id="btn-max">&#9633;</button>
+      <button class="wbtn danger" id="btn-close">&#10005;</button>
+    </div>
+  </div>
+
+  <!-- Shell -->
+  <div id="shell">
+
+    <!-- ── Activity bar ── -->
+    <nav id="activity-bar">
+      <div id="ab-top">
+        <button class="ab-btn active" data-page="chat"     title="Chat">
+          <svg viewBox="0 0 20 20" fill="none"><path d="M3 4h14a1 1 0 011 1v8a1 1 0 01-1 1H7l-4 3V5a1 1 0 011-1z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>
+        </button>
+        <button class="ab-btn" data-page="memory"  title="Memory">
+          <svg viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="7" stroke="currentColor" stroke-width="1.4"/><circle cx="10" cy="10" r="2.5" fill="currentColor"/><path d="M10 3v2M10 15v2M3 10h2M15 10h2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+        </button>
+        <button class="ab-btn" data-page="skills"  title="Skills">
+          <svg viewBox="0 0 20 20" fill="none"><path d="M10 2l2.4 5 5.6.8-4 3.9.9 5.5L10 14.5l-4.9 2.7.9-5.5L2 7.8l5.6-.8L10 2z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>
+        </button>
+        <button class="ab-btn" data-page="plugins" title="Plugins">
+          <svg viewBox="0 0 20 20" fill="none"><rect x="3" y="3" width="6" height="6" rx="1" stroke="currentColor" stroke-width="1.4"/><rect x="11" y="3" width="6" height="6" rx="1" stroke="currentColor" stroke-width="1.4"/><rect x="3" y="11" width="6" height="6" rx="1" stroke="currentColor" stroke-width="1.4"/><path d="M14 11v6M11 14h6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+        </button>
+      </div>
+      <div id="ab-bottom">
+        <button class="ab-btn" data-page="settings" title="Settings">
+          <svg viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="2.5" stroke="currentColor" stroke-width="1.4"/><path d="M10 2v2m0 12v2M2 10h2m12 0h2m-3.17-5.66-1.42 1.42M6.59 13.41l-1.42 1.42m0-9.25 1.42 1.42m6.82 6.82 1.42 1.42" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+        </button>
+        <!-- Connection dot -->
+        <div id="conn-dot" class="offline" title="Backend offline" role="status" aria-live="polite" aria-label="Backend offline"></div>
+      </div>
+    </nav>
+
+    <!-- ── Pages ── -->
+    <div id="pages">
+
+      <!-- CHAT PAGE -->
+      <div class="page active" id="page-chat">
+        <div id="chat-sidebar">
+          <div id="sidebar-brand">
+            <span class="live-dot" aria-hidden="true"></span>
+            <span class="sidebar-brand-name">Rook</span>
+            <span class="sidebar-brand-tag" id="sidebar-version-tag">v1</span>
+          </div>
+          <button id="btn-new-chat">
+            <svg viewBox="0 0 16 16" fill="none"><path d="M8 2v12M2 8h12" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+            New chat
+            <span class="kbd-hint">⌘N</span>
+          </button>
+          <!-- Reconnect banner — shown when backend is disconnected -->
+          <div id="reconnect-banner" class="hidden">
+            <svg viewBox="0 0 16 16" fill="none" width="13" height="13"><circle cx="8" cy="8" r="6.5" stroke="currentColor" stroke-width="1.3"/><path d="M8 5v3.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="8" cy="11" r=".8" fill="currentColor"/></svg>
+            <span id="reconnect-status-text">Reconnecting…</span>
+            <button id="btn-reconnect-now">Retry now</button>
+          </div>
+          <div id="update-banner" class="hidden" role="status" aria-live="polite">
+            <div class="update-banner-head">
+              <span class="update-banner-kicker">Update available</span>
+              <button id="btn-update-dismiss" class="update-banner-close" aria-label="Dismiss update notice">Later</button>
+            </div>
+            <div class="update-banner-title">Rook <span id="update-version-label">v0.0.0</span></div>
+            <div id="update-notes" class="update-banner-notes hidden"></div>
+            <div id="update-progress-text" class="update-banner-status hidden"></div>
+            <div id="update-progress-wrap" class="update-progress hidden"><div id="update-progress-bar"></div></div>
+            <div class="update-banner-actions">
+              <button id="btn-update-now">Update Now</button>
+            </div>
+          </div>
+          <!-- Conversation search -->
+          <div id="sidebar-search-wrap">
+            <input id="sidebar-search" type="text" placeholder="Search conversations…" autocomplete="off"/>
+          </div>
+          <!-- Indexed folder indicator -->
+          <div id="index-folder-bar" class="hidden">
+            <svg viewBox="0 0 16 16" fill="none" width="11" height="11"><path d="M2 4h5l1.5 2H14v7H2V4z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg>
+            <span id="index-folder-name"></span>
+            <span id="index-folder-status" class="index-status-dot"></span>
+          </div>
+          <button id="btn-index-folder" title="Index a local folder for semantic search">
+            <svg viewBox="0 0 16 16" fill="none" width="12" height="12"><path d="M2 4h5l1.5 2H14v7H2V4z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg>
+            Index folder
+          </button>
+          <div id="conv-list-wrap">
+            <ul id="conversation-list"></ul>
+          </div>
+        </div>
+        <div id="chat-main">
+          <div id="chat-header">
+            <span id="chat-title">New Conversation</span>
+            <span id="mock-badge" class="hidden" title="No API key — backend is returning deterministic placeholder responses. Add a key in Settings.">MOCK</span>
+            <div id="header-right">
+              <div id="model-select-wrap">
+                <select id="model-select">
+                  <option value="">Loading models…</option>
+                </select>
+                <button id="btn-refresh-models" class="header-icon-btn" title="Refresh model list" aria-label="Refresh model list">
+                  <svg viewBox="0 0 16 16" fill="none" width="12" height="12"><path d="M13.5 8A5.5 5.5 0 1 1 8 2.5a5.5 5.5 0 0 1 3.89 1.61L13.5 2.5v4h-4l1.46-1.46A3.5 3.5 0 1 0 11.5 8" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </button>
+              </div>
+              <button id="btn-export-chat" class="header-icon-btn" aria-label="Export conversation as Markdown" title="Export conversation (.md)">
+                <svg viewBox="0 0 20 20" fill="none" width="14" height="14">
+                  <path d="M10 3v10M6 9l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                  <path d="M4 15h12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                </svg>
+              </button>
+              <button id="btn-memory-toggle" class="header-icon-btn" aria-label="Toggle memory panel" title="Show memory panel (Ctrl+M)">
+                <svg viewBox="0 0 20 20" fill="none" width="14" height="14">
+                  <path d="M4 4h12v12H4z" stroke="currentColor" stroke-width="1.5"/>
+                  <path d="M4 8h12M4 12h12M8 4v12M12 4v12" stroke="currentColor" stroke-width="1.2" opacity=".55"/>
+                </svg>
+              </button>
+            </div>
+          </div>
+          <!-- Context window usage bar — thin strip between header and messages -->
+          <div id="ctx-bar-wrap"><div id="ctx-bar-fill"></div></div>
+          <div id="messages">
+            <!-- Empty conversation state — shown when no messages exist -->
+            <div id="empty-state" class="visible">
+              <div class="empty-marker">
+                <span class="empty-marker-rule"></span>
+                <span>NEW SESSION</span>
+              </div>
+              <div class="empty-tagline">How can I help?</div>
+              <div class="empty-sub">Ask anything, explore your documents, or pick a shortcut below.</div>
+              <div class="empty-shortcuts">
+                <button class="shortcut-chip" data-action="new-chat"><kbd>Ctrl+N</kbd> <span>New chat</span></button>
+                <button class="shortcut-chip" data-action="open-palette"><kbd>Ctrl+K</kbd> <span>Commands</span></button>
+                <button class="shortcut-chip" data-action="go-memory"><kbd>Ctrl+/</kbd> <span>Memory</span></button>
+              </div>
+            </div>
+          </div>
+          <!-- Tool approval strip -->
+          <div id="approval-strip" class="hidden">
+            <svg viewBox="0 0 16 16" fill="none" width="15" height="15"><circle cx="8" cy="8" r="6.5" stroke="#fbbf24" stroke-width="1.3"/><path d="M8 5v3.5l2 1.2" stroke="#fbbf24" stroke-width="1.3" stroke-linecap="round"/></svg>
+            <span id="approval-text"></span>
+            <button id="btn-approve" class="strip-btn ok">Approve</button>
+            <button id="btn-reject"  class="strip-btn bad">Reject</button>
+          </div>
+          <div id="input-area">
+            <div id="input-center">
+              <!-- ── Attached image previews ── -->
+              <div id="img-attach-strip" class="hidden"></div>
+              <!-- ── Input box ── -->
+              <div id="input-box">
+                <span id="approval-badge" class="hidden" aria-hidden="true"></span>
+                <button id="btn-attach" title="Attach file or image (or drag &amp; drop)" aria-label="Attach file">
+                  <svg viewBox="0 0 16 16" fill="none" width="14" height="14"><path d="M13 7.5l-5.5 5.5a3.5 3.5 0 01-4.95-4.95l5.5-5.5a2 2 0 012.83 2.83L5.38 11.3a.5.5 0 01-.7-.7L10 5.33" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </button>
+                <input id="file-input" type="file" multiple accept="*/*" style="display:none"/>
+                <textarea id="chat-input" placeholder="Message Rook…" rows="1"></textarea>
+                <button id="btn-send" aria-label="Send message">
+                  <svg viewBox="0 0 16 16" fill="none"><path d="M13.5 8L2.5 2.5l2 5.5-2 5.5L13.5 8z" fill="currentColor"/></svg>
+                </button>
+                <button id="btn-stop" class="hidden" aria-label="Stop generating" title="Stop generating" style="position:relative">
+                  <svg viewBox="0 0 16 16" fill="none"><rect x="4" y="4" width="8" height="8" rx="1.5" fill="currentColor"/></svg>
+                </button>
+              </div>
+              <!-- ── Toolbar row ── -->
+              <div id="input-toolbar">
+                <div id="toolbar-left">
+                  <!-- Mode dropdown trigger -->
+                  <div id="mode-dropdown-wrap">
+                    <button id="btn-mode-toggle" title="Switch agent mode" aria-haspopup="listbox" aria-expanded="false" aria-label="Switch agent mode: Chat">
+                      <svg id="mode-icon-chat" class="mode-icon active" viewBox="0 0 20 20" fill="none" width="14" height="14">
+                        <path d="M3 4.5A2 2 0 015 2.5h10a2 2 0 012 2v6.5a2 2 0 01-2 2H7.2L3 16V4.5z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+                        <circle cx="7.2" cy="8" r="1" fill="currentColor"/><circle cx="10" cy="8" r="1" fill="currentColor"/><circle cx="12.8" cy="8" r="1" fill="currentColor"/>
+                      </svg>
+                      <svg id="mode-icon-coder" class="mode-icon" viewBox="0 0 20 20" fill="none" width="14" height="14">
+                        <rect x="2" y="3" width="16" height="14" rx="2" stroke="currentColor" stroke-width="1.5"/>
+                        <path d="M2 7h16" stroke="currentColor" stroke-width="1.2" opacity=".5"/>
+                        <path d="M6.5 13l-2.5-2 2.5-2M13.5 13l2.5-2-2.5-2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                        <path d="M9 14l2-6" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+                      </svg>
+                      <svg id="mode-icon-team" class="mode-icon" viewBox="0 0 20 20" fill="none" width="14" height="14">
+                        <rect x="7.5" y="1.5" width="5" height="5" rx="1.5" stroke="currentColor" stroke-width="1.4"/>
+                        <rect x="1.5" y="13.5" width="5" height="5" rx="1.5" stroke="currentColor" stroke-width="1.4"/>
+                        <rect x="13.5" y="13.5" width="5" height="5" rx="1.5" stroke="currentColor" stroke-width="1.4"/>
+                        <path d="M10 6.5v3.5M10 10L4.5 13.5M10 10l5.5 3.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+                      </svg>
+                      <span id="active-mode-label">Chat</span>
+                      <svg viewBox="0 0 10 6" fill="none" width="8" height="8" class="caret"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    </button>
+                    <!-- Dropdown menu (hidden by default) -->
+                    <div id="mode-menu" class="hidden">
+                      <button class="mode-item active" data-mode="Chat">
+                        <svg viewBox="0 0 20 20" fill="none" width="16" height="16">
+                          <path d="M3 4.5A2 2 0 015 2.5h10a2 2 0 012 2v6.5a2 2 0 01-2 2H7.2L3 16V4.5z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+                          <circle cx="7.2" cy="8" r="1" fill="currentColor"/><circle cx="10" cy="8" r="1" fill="currentColor"/><circle cx="12.8" cy="8" r="1" fill="currentColor"/>
+                        </svg>
+                        <div class="mode-item-text"><span class="mi-name">Chat</span><span class="mi-desc">Conversational AI</span></div>
+                      </button>
+                      <button class="mode-item" data-mode="Coder">
+                        <svg viewBox="0 0 20 20" fill="none" width="16" height="16">
+                          <rect x="2" y="3" width="16" height="14" rx="2" stroke="currentColor" stroke-width="1.5"/>
+                          <path d="M2 7h16" stroke="currentColor" stroke-width="1.2" opacity=".5"/>
+                          <path d="M6.5 13l-2.5-2 2.5-2M13.5 13l2.5-2-2.5-2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                          <path d="M9 14l2-6" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+                        </svg>
+                        <div class="mode-item-text"><span class="mi-name">Coder</span><span class="mi-desc">Code &amp; tools</span></div>
+                      </button>
+                      <button class="mode-item" data-mode="Team">
+                        <svg viewBox="0 0 20 20" fill="none" width="16" height="16">
+                          <rect x="7.5" y="1.5" width="5" height="5" rx="1.5" stroke="currentColor" stroke-width="1.4"/>
+                          <rect x="1.5" y="13.5" width="5" height="5" rx="1.5" stroke="currentColor" stroke-width="1.4"/>
+                          <rect x="13.5" y="13.5" width="5" height="5" rx="1.5" stroke="currentColor" stroke-width="1.4"/>
+                          <path d="M10 6.5v3.5M10 10L4.5 13.5M10 10l5.5 3.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+                        </svg>
+                        <div class="mode-item-text"><span class="mi-name">Team</span><span class="mi-desc">Task planner</span></div>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                <div id="toolbar-right">
+                  <div id="input-hint">Enter · send &nbsp; Shift+Enter · newline</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <!-- ── Memory side panel: renders curated context for the active chat ── -->
+        <aside id="memory-panel" class="hidden" aria-label="Curated memory panel">
+          <div id="memory-panel-header">
+            <span id="memory-panel-title">Memory</span>
+            <span id="memory-panel-count"></span>
+            <!-- GNN status chip — hidden until memory_capabilities arrives -->
+            <span id="gnn-chip" class="hidden" title="GraphSAGE training pipeline status"></span>
+            <button id="btn-memory-close" class="header-icon-btn" aria-label="Close memory panel" title="Close (Ctrl+M)">
+              <svg viewBox="0 0 16 16" fill="none" width="12" height="12">
+                <path d="M3 3l10 10M13 3L3 13" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+              </svg>
+            </button>
+          </div>
+          <div id="memory-panel-body">
+            <!-- Live agent task list — populated when Team mode calls todo_write -->
+            <div id="todo-widget" class="hidden">
+              <div id="todo-widget-header">
+                <span class="todo-widget-title">Agent tasks</span>
+                <span id="todo-widget-count"></span>
+              </div>
+              <ul id="todo-widget-list"></ul>
+            </div>
+            <div id="memory-panel-empty" class="memory-empty">
+              Memory that the curator injects into a chat will appear here with scores. Send a message to see it in action.
+            </div>
+            <ul id="memory-panel-list"></ul>
+          </div>
+        </aside>
+      </div>
+
+      <!-- MEMORY PAGE -->
+      <div class="page" id="page-memory">
+        <div class="page-header">
+          <h2 data-section="§ 01">Memory Graph</h2>
+          <div class="page-search">
+            <input id="mem-query" type="text" placeholder="Search nodes…"/>
+            <button id="btn-mem-search" class="icon-btn">
+              <svg viewBox="0 0 16 16" fill="none"><circle cx="7" cy="7" r="4.5" stroke="currentColor" stroke-width="1.3"/><path d="M10.5 10.5l3 3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+            </button>
+            <button id="btn-mem-refresh" class="icon-btn" title="Reload">
+              <svg viewBox="0 0 16 16" fill="none"><path d="M13.5 8A5.5 5.5 0 1 1 8 2.5a5.5 5.5 0 0 1 3.89 1.61L13.5 2.5v4h-4l1.46-1.46A3.5 3.5 0 1 0 11.5 8" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+          </div>
+        </div>
+        <div class="page-body">
+          <!-- Stats strip -->
+          <div id="mem-stats">
+            <div class="mem-stat"><span class="mem-stat-num" id="mem-stat-total">0</span><span class="mem-stat-lbl">nodes</span></div>
+            <div class="mem-stat"><span class="mem-stat-num" id="mem-stat-shown">0</span><span class="mem-stat-lbl">shown</span></div>
+            <div class="mem-stat"><span class="mem-stat-num" id="mem-stat-types">0</span><span class="mem-stat-lbl">types</span></div>
+          </div>
+          <!-- Type filter chips -->
+          <div id="mem-type-filter"></div>
+          <!-- Grouped node list -->
+          <div id="mem-graph-view"></div>
+        </div>
+      </div>
+
+      <!-- SKILLS PAGE -->
+      <div class="page" id="page-skills">
+        <div class="page-header">
+          <h2 data-section="§ 02">Skills</h2>
+          <button id="btn-reload-skills" class="icon-btn" title="Refresh">
+            <svg viewBox="0 0 16 16" fill="none"><path d="M13 8A5 5 0 113.5 5M3 2v3h3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+        </div>
+        <div class="page-body">
+          <ul id="skills-list" class="item-list"></ul>
+        </div>
+      </div>
+
+      <!-- PLUGINS PAGE -->
+      <div class="page" id="page-plugins">
+        <div class="page-header">
+          <h2 data-section="§ 03">Plugins</h2>
+          <div class="page-search">
+            <input id="plugin-query" type="text" placeholder="Search GitHub for MCPs &amp; Skills…"/>
+            <button id="btn-plugin-search" class="icon-btn">
+              <svg viewBox="0 0 16 16" fill="none"><circle cx="7" cy="7" r="4.5" stroke="currentColor" stroke-width="1.3"/><path d="M10.5 10.5l3 3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+            </button>
+          </div>
+        </div>
+        <div class="plugin-tabs">
+          <button class="ptab active" data-ptab="browse">Browse</button>
+          <button class="ptab" data-ptab="installed">Installed</button>
+          <button class="ptab" data-ptab="search">Search results</button>
+        </div>
+        <div class="page-body">
+
+          <!-- BROWSE panel -->
+          <div id="plugins-browse" class="plugin-panel active">
+            <div class="browse-controls">
+              <div class="filter-pills">
+                <button class="fpill active" data-type="all">All</button>
+                <button class="fpill" data-type="mcp">MCP Servers</button>
+                <button class="fpill" data-type="skill">AI Skills</button>
+              </div>
+              <div class="sort-controls">
+                <label>Category</label>
+                <select id="browse-category">
+                  <option value="all">All categories</option>
+                  <option value="Browser/Web">Browser &amp; Web</option>
+                  <option value="Database">Database</option>
+                  <option value="Search">Search</option>
+                  <option value="Files/Storage">Files &amp; Storage</option>
+                  <option value="Code/Git">Code &amp; Git</option>
+                  <option value="Cloud/Infra">Cloud &amp; Infra</option>
+                  <option value="AI/Vectors">AI &amp; Vectors</option>
+                  <option value="Communication">Communication</option>
+                  <option value="Productivity">Productivity</option>
+                  <option value="Finance/Crypto">Finance &amp; Crypto</option>
+                </select>
+                <label>Sort</label>
+                <select id="browse-sort">
+                  <option value="stars">Stars</option>
+                  <option value="updated">Recently updated</option>
+                  <option value="forks">Forks</option>
+                </select>
+              </div>
+            </div>
+            <ul id="browse-list" class="item-list"></ul>
+            <div id="browse-footer">
+              <button id="btn-load-more" class="load-more-btn" style="display:none">Load more</button>
+              <span id="browse-status" class="browse-status" role="status" aria-live="polite"></span>
+            </div>
+          </div>
+
+          <!-- INSTALLED panel -->
+          <div id="plugins-installed" class="plugin-panel">
+            <ul id="installed-list" class="item-list"></ul>
+          </div>
+
+          <!-- SEARCH panel -->
+          <div id="plugins-search" class="plugin-panel">
+            <ul id="search-list" class="item-list"></ul>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- SETTINGS PAGE -->
+      <div class="page" id="page-settings">
+        <div class="settings-shell">
+
+          <!-- Left nav -->
+          <nav class="snav">
+            <div class="snav-header">
+              <div class="snav-logo">
+                <svg viewBox="0 0 20 20" fill="none" width="16" height="16"><circle cx="10" cy="10" r="2.5" stroke="currentColor" stroke-width="1.4"/><path d="M10 2v2m0 12v2M2 10h2m12 0h2m-3.17-5.66-1.42 1.42M6.59 13.41l-1.42 1.42m0-9.25 1.42 1.42m6.82 6.82 1.42 1.42" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+              </div>
+              <div>
+                <div class="snav-product">Rook</div>
+                <div class="snav-label">Settings</div>
+              </div>
+            </div>
+
+            <div class="snav-group-label">Configuration</div>
+
+            <button class="snav-item active" data-target="scontent-llm">
+              <svg viewBox="0 0 16 16" fill="none" width="15" height="15"><rect x="1" y="3" width="14" height="10" rx="2" stroke="currentColor" stroke-width="1.3"/><path d="M5 7l2 2-2 2M9 11h2" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              <span>Language Model</span>
+              <span class="snav-item-tag">LLM</span>
+            </button>
+            <button class="snav-item" data-target="scontent-appearance">
+              <svg viewBox="0 0 16 16" fill="none" width="15" height="15"><circle cx="8" cy="8" r="5.5" stroke="currentColor" stroke-width="1.3"/><path d="M8 5v3l2 1" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+              <span>Appearance</span>
+              <span class="snav-item-tag">UI</span>
+            </button>
+
+            <div class="snav-group-label">Integrations</div>
+
+            <button class="snav-item" data-target="scontent-plugins">
+              <svg viewBox="0 0 16 16" fill="none" width="15" height="15"><path d="M6 1v4H2v10h12V5h-4V1H6Z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M6 9h4M8 7v4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+              <span>Plugins</span>
+              <span class="snav-item-tag">GITHUB</span>
+            </button>
+
+            <div class="snav-group-label">Advanced</div>
+
+            <button class="snav-item" data-target="scontent-system">
+              <svg viewBox="0 0 16 16" fill="none" width="15" height="15"><rect x="1" y="3" width="14" height="10" rx="1.5" stroke="currentColor" stroke-width="1.3"/><circle cx="4.5" cy="8" r="1" fill="currentColor"/><path d="M7 8h5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+              <span>System</span>
+              <span class="snav-item-tag">SYSTEM</span>
+            </button>
+
+            <div class="snav-spacer"></div>
+            <div class="snav-version"><span id="settings-version-label">v1.0.0 · debug</span></div>
+          </nav>
+
+          <!-- Right content area -->
+          <div class="scontent-area">
+
+            <!-- LLM -->
+            <div class="scontent active" id="scontent-llm">
+              <div class="scontent-header">
+                <h2 class="scontent-title">Language Model</h2>
+                <p class="scontent-desc">Connect Rook to any OpenAI-compatible API endpoint. Your key is stored locally and written to <code>.env</code> — never transmitted to Rook servers.</p>
+              </div>
+              <div class="scontent-body">
+
+                <!-- Platform account sign-in -->
+                <div id="platform-auth-block" style="border-left: 2px solid var(--accent); padding-left: 14px; margin-bottom: 24px;">
+
+                  <!-- Idle: not signed in -->
+                  <div id="platform-state-idle">
+                    <div class="sfield-meta" style="margin-bottom: 12px;">
+                      <label class="sfield-label">SVRN Platform</label>
+                      <span class="sfield-hint">Sign in to enable cloud AI models — nova-fast, qwen-coder, gemini-search. Opens your browser, no key required.</span>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+                      <button id="btn-platform-signin" class="sfield-fetch-btn" type="button" style="padding: 6px 14px; font-size: 12px;">
+                        Sign in to SVRN →
+                      </button>
+                      <button id="btn-platform-simulate" class="sfield-fetch-btn" type="button" style="padding: 4px 10px; font-size: 11px; opacity: 0.55;" title="Dev mode only" hidden>
+                        Test (dev) →
+                      </button>
+                    </div>
+                  </div>
+
+                  <!-- Waiting: polling for authorization -->
+                  <div id="platform-state-waiting" hidden>
+                    <div class="sfield-meta" style="margin-bottom: 10px;">
+                      <label class="sfield-label" style="display:flex;align-items:center;gap:8px;">
+                        <span class="live-dot"></span>
+                        Waiting for authorization
+                      </label>
+                      <span class="sfield-hint">Authorize in the browser window that just opened, then come back.</span>
+                    </div>
+                    <button id="btn-platform-cancel" class="sfield-fetch-btn" type="button" style="padding: 4px 10px; font-size: 11px; opacity: 0.7;">
+                      Cancel
+                    </button>
+                  </div>
+
+                  <!-- Connected: signed in -->
+                  <div id="platform-state-connected" hidden>
+                    <div class="sfield-meta" style="margin-bottom: 10px;">
+                      <label class="sfield-label" style="display:flex;align-items:center;gap:8px;">
+                        <span style="width:6px;height:6px;border-radius:50%;background:var(--success);display:inline-block;flex-shrink:0;"></span>
+                        Connected to SVRN
+                      </label>
+                      <span class="sfield-hint" id="platform-account-info">—</span>
+                    </div>
+                    <button id="btn-platform-signout" class="sfield-fetch-btn" type="button" style="padding: 4px 10px; font-size: 11px; opacity: 0.7;">
+                      Sign out
+                    </button>
+                  </div>
+
+                </div>
+
+                <div id="custom-api-fields">
+                <div class="sfield">
+                  <div class="sfield-meta">
+                    <label class="sfield-label" for="s-api-url">Custom API Base URL</label>
+                    <span class="sfield-hint">Any OpenAI-compatible endpoint — used when not signed into SVRN</span>
+                  </div>
+                  <input type="text" id="s-api-url" class="sfield-input" placeholder="https://api.openai.com/v1" autocomplete="off"/>
+                </div>
+
+                <div class="sfield">
+                  <div class="sfield-meta">
+                    <label class="sfield-label" for="s-api-key">API Key</label>
+                    <span class="sfield-hint">Stored locally in <code>.env</code></span>
+                  </div>
+                  <div class="sfield-secret">
+                    <input type="password" id="s-api-key" class="sfield-input sfield-input--mono" placeholder="sk-…" autocomplete="off" spellcheck="false"/>
+                    <button class="sfield-eye" type="button" data-for="s-api-key" title="Reveal key">
+                      <svg viewBox="0 0 16 16" fill="none" width="14" height="14"><path d="M1 8s2.5-5 7-5 7 5 7 5-2.5 5-7 5-7-5-7-5Z" stroke="currentColor" stroke-width="1.3"/><circle cx="8" cy="8" r="2" stroke="currentColor" stroke-width="1.3"/></svg>
+                    </button>
+                  </div>
+                </div>
+                </div>
+
+                <div class="sfield">
+                  <div class="sfield-meta">
+                    <label class="sfield-label" for="s-model">Default Model</label>
+                    <span class="sfield-hint" id="s-model-hint">Select a model</span>
+                  </div>
+                  <div class="sfield-model-row">
+                    <select id="s-model" class="sfield-input sfield-select">
+                      <option value="">— select a model —</option>
+                    </select>
+                    <button id="btn-fetch-models" class="sfield-fetch-btn" type="button" title="Fetch models from API">↻ Fetch</button>
+                  </div>
+                </div>
+
+                <div class="sfield">
+                  <div class="sfield-meta">
+                    <label class="sfield-label" for="s-system-prompt">System Prompt</label>
+                    <span class="sfield-hint">Prepended to every conversation as a system message</span>
+                  </div>
+                  <textarea id="s-system-prompt" class="sfield-textarea" placeholder="You are a helpful assistant…" rows="3" spellcheck="false"></textarea>
+                </div>
+
+                <div class="sfield">
+                  <div class="sfield-meta">
+                    <label class="sfield-label" for="s-temperature">Temperature</label>
+                    <span class="sfield-hint">Controls randomness (0 = deterministic, 2 = creative)</span>
+                  </div>
+                  <div class="sslider-row">
+                    <input type="range" id="s-temperature" min="0" max="2" step="0.05" value="0.7"/>
+                    <input type="number" id="s-temperature-num" class="sslider-num" min="0" max="2" step="0.05" value="0.7" aria-label="Temperature value"/>
+                  </div>
+                </div>
+
+                <div class="sfield">
+                  <div class="sfield-meta">
+                    <label class="sfield-label" for="s-max-tokens">Max Tokens</label>
+                    <span class="sfield-hint">Maximum tokens in the model's response</span>
+                  </div>
+                  <div class="sslider-row">
+                    <input type="range" id="s-max-tokens" min="256" max="16384" step="256" value="4096"/>
+                    <input type="number" id="s-max-tokens-num" class="sslider-num" min="256" max="16384" step="256" value="4096" aria-label="Max tokens value"/>
+                  </div>
+                </div>
+
+                <!-- API Profiles -->
+                <div class="sfield" id="sfield-profiles">
+                  <div class="sfield-meta">
+                    <label class="sfield-label">API Profiles</label>
+                    <span class="sfield-hint">Save named configurations to switch providers quickly</span>
+                  </div>
+                  <div id="profiles-list"></div>
+                  <div class="profile-save-row">
+                    <input type="text" id="profile-name-input" class="sfield-input" placeholder="Profile name (e.g. OpenAI, Local)" autocomplete="off" maxlength="32"/>
+                    <button id="btn-save-profile" class="sfield-fetch-btn" type="button">+ Save current</button>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+
+            <!-- Appearance -->
+            <div class="scontent" id="scontent-appearance">
+              <div class="scontent-header">
+                <h2 class="scontent-title">Appearance</h2>
+                <p class="scontent-desc">Control how the Rook interface looks and behaves.</p>
+              </div>
+              <div class="scontent-body">
+
+                <div class="stoggle-row">
+                  <div class="stoggle-info">
+                    <span class="stoggle-name">Input hint</span>
+                    <span class="stoggle-desc">Show the keyboard shortcut tip below the chat input box</span>
+                  </div>
+                  <label class="stoggle-switch">
+                    <input type="checkbox" id="s-show-hint" checked/>
+                    <span class="stoggle-track"><span class="stoggle-thumb"></span></span>
+                  </label>
+                </div>
+
+                <div class="stoggle-row">
+                  <div class="stoggle-info">
+                    <span class="stoggle-name">Preview pane open by default</span>
+                    <span class="stoggle-desc">Automatically open the artifact viewer when a new conversation starts</span>
+                  </div>
+                  <label class="stoggle-switch">
+                    <input type="checkbox" id="s-preview-default"/>
+                    <span class="stoggle-track"><span class="stoggle-thumb"></span></span>
+                  </label>
+                </div>
+
+                <div class="stoggle-row">
+                  <div class="stoggle-info">
+                    <span class="stoggle-name">Launch at login</span>
+                    <span class="stoggle-desc">Start Rook automatically when Windows boots</span>
+                  </div>
+                  <label class="stoggle-switch">
+                    <input type="checkbox" id="s-autostart"/>
+                    <span class="stoggle-track"><span class="stoggle-thumb"></span></span>
+                  </label>
+                </div>
+
+              </div>
+            </div>
+
+            <!-- Plugins -->
+            <div class="scontent" id="scontent-plugins">
+              <div class="scontent-header">
+                <h2 class="scontent-title">Plugins &amp; Extensions</h2>
+                <p class="scontent-desc">Authenticate with GitHub to unlock plugin discovery, starred repos, and featured MCP servers in the plugin browser.</p>
+              </div>
+              <div class="scontent-body">
+
+                <div class="sfield">
+                  <div class="sfield-meta">
+                    <label class="sfield-label" for="s-github-token">GitHub Personal Access Token</label>
+                    <span class="sfield-hint">Enables plugin search via GitHub API (public repos scope is enough)</span>
+                  </div>
+                  <div class="sfield-secret">
+                    <input type="password" id="s-github-token" class="sfield-input sfield-input--mono" placeholder="github_pat_…" autocomplete="off" spellcheck="false"/>
+                    <button class="sfield-eye" type="button" data-for="s-github-token" title="Reveal token">
+                      <svg viewBox="0 0 16 16" fill="none" width="14" height="14"><path d="M1 8s2.5-5 7-5 7 5 7 5-2.5 5-7 5-7-5-7-5Z" stroke="currentColor" stroke-width="1.3"/><circle cx="8" cy="8" r="2" stroke="currentColor" stroke-width="1.3"/></svg>
+                    </button>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+
+            <!-- System -->
+            <div class="scontent" id="scontent-system">
+              <div class="scontent-header">
+                <h2 class="scontent-title">System</h2>
+                <p class="scontent-desc">Advanced runtime configuration. Leave fields blank to use auto-detection.</p>
+              </div>
+              <div class="scontent-body">
+
+                <div class="sfield">
+                  <div class="sfield-meta">
+                    <label class="sfield-label" for="s-backend-path">Custom Backend Path</label>
+                    <span class="sfield-hint">Override the auto-detected <code>rook.exe</code> location</span>
+                  </div>
+                  <input type="text" id="s-backend-path" class="sfield-input sfield-input--mono" placeholder="C:\path\to\rook.exe" autocomplete="off" spellcheck="false"/>
+                </div>
+
+              </div>
+            </div>
+
+            <!-- Sticky footer -->
+            <div class="scontent-footer">
+              <span class="scontent-footer-note">
+                <svg viewBox="0 0 14 14" fill="none" width="12" height="12"><circle cx="7" cy="7" r="5.5" stroke="currentColor" stroke-width="1.2"/><path d="M7 6.5v3M7 4.5v.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+                Changes take effect immediately
+              </span>
+              <button id="btn-save-settings" class="save-btn">
+                <svg viewBox="0 0 14 14" fill="none" width="13" height="13"><path d="M2 7l3.5 3.5L12 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                Save settings
+              </button>
+            </div>
+
+          </div><!-- /scontent-area -->
+        </div><!-- /settings-shell -->
+      </div>
+
+    </div><!-- /pages -->
+
+    <!-- ── Artifact viewer ── -->
+    <div id="artifact-pane" class="closed">
+      <div id="artifact-header">
+        <div id="artifact-tabs"></div>
+        <button id="btn-close-artifact" title="Close preview">
+          <svg viewBox="0 0 16 16" fill="none"><path d="M3 3l10 10M13 3L3 13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+        </button>
+      </div>
+      <div id="artifact-body">
+        <!-- iframe injected per-tab -->
+      </div>
+    </div>
+
+  </div><!-- /shell -->
+</div><!-- /app -->
+
+<!-- ── Plugin detail modal ── -->
+<div id="plugin-modal" class="modal-overlay hidden">
+  <div class="modal-card">
+    <div class="modal-header">
+      <div class="modal-title-row">
+        <img id="modal-avatar" class="modal-avatar" src="" alt=""/>
+        <div>
+          <h3 id="modal-name"></h3>
+          <span id="modal-full-name"></span>
+        </div>
+      </div>
+      <button id="modal-close" class="modal-close-btn" title="Close">
+        <svg viewBox="0 0 16 16" fill="none"><path d="M3 3l10 10M13 3L3 13" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <p id="modal-desc" class="modal-desc"></p>
+      <div class="modal-stats">
+        <span id="modal-stars" class="modal-stat">★ <span></span></span>
+        <span id="modal-forks" class="modal-stat">⑂ <span></span></span>
+        <span id="modal-lang" class="modal-stat lang"></span>
+        <span id="modal-updated" class="modal-stat"></span>
+      </div>
+      <div id="modal-topics" class="modal-topics"></div>
+      <div id="modal-category" class="modal-category-row"></div>
+    </div>
+    <div class="modal-footer">
+      <button id="modal-repo-btn" class="ia-btn">View on GitHub</button>
+      <button id="modal-install-btn" class="ia-btn install">Install</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Confirm modal (delete conversation, etc.) ── -->
+<div id="confirm-modal" class="hidden" role="dialog" aria-modal="true" aria-labelledby="confirm-title">
+  <div class="confirm-card">
+    <div class="confirm-title" id="confirm-title">Are you sure?</div>
+    <div class="confirm-body"  id="confirm-body"></div>
+    <div class="confirm-actions">
+      <button class="confirm-btn-cancel" id="confirm-cancel">Cancel</button>
+      <button class="confirm-btn-danger" id="confirm-ok">Delete</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Toast notification stack ── -->
+<div id="toast-container"></div>
+
+<!-- ── Command palette (Ctrl+K) ── -->
+<div id="cmd-palette-overlay" class="hidden">
+  <div id="cmd-palette" role="dialog" aria-label="Command palette">
+    <div id="cmd-input-wrap">
+      <svg viewBox="0 0 16 16" fill="none" width="16" height="16"><circle cx="7" cy="7" r="4.5" stroke="currentColor" stroke-width="1.3"/><path d="M10.5 10.5l3 3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+      <input id="cmd-input" type="text" placeholder="Search commands and conversations…" autocomplete="off" spellcheck="false"/>
+    </div>
+    <div id="cmd-results"></div>
+    <div id="cmd-palette-footer">
+      <span class="cmd-hint"><kbd>↑↓</kbd> navigate</span>
+      <span class="cmd-hint"><kbd>Enter</kbd> select</span>
+      <span class="cmd-hint"><kbd>Esc</kbd> close</span>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.10.0/highlight.min.js" crossorigin="anonymous" integrity="sha512-6yoqbrcLAHDWAdQmiRlHG4+m0g/CT/V9AGyxabG8j7Jk8j3r3K6due7oqpiRMZqcYe9WM2gPcaNNxnl2ux+3tA=="></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.2.4/purify.min.js" crossorigin="anonymous"></script>
+<script type="module" src="app.js"></script>
+</body>
+</html>

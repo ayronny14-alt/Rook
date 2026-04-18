@@ -1,0 +1,77 @@
+{
+  "name": "rook",
+  "version": "0.1.0",
+  "description": "Rook AI Assistant – Electron frontend",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev",
+    "build:backend": "node scripts/build-backend.js",
+    "prebuild": "npm run build:backend",
+    "build": "electron-builder build --win",
+    "build:dir": "electron-builder build --win dir",
+    "prerelease": "npm run build:backend",
+    "release": "electron-builder build --win --publish always",
+    "release:draft": "electron-builder build --win --publish onTagOrDraft"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "electron-updater": "^6.8.3"
+  },
+  "devDependencies": {
+    "electron": "^41.1.1",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "com.svrn.rook",
+    "productName": "Rook",
+    "copyright": "Copyright © 2025",
+    "beforeBuild": "scripts/verify-backend.js",
+    "files": [
+      "src/**/*",
+      "!src/**/*.map",
+      "!**/.env",
+      "!**/.env.*",
+      "!**/node_modules/.cache"
+    ],
+    "extraResources": [
+      {
+        "from": "../backend/target/release/rook.exe",
+        "to": "backend/rook.exe"
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ],
+      "artifactName": "Rook-Setup-${version}.exe"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "allowElevation": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Rook",
+      "menuCategory": "Rook",
+      "uninstallDisplayName": "Rook",
+      "deleteAppDataOnUninstall": false,
+      "runAfterFinish": true,
+      "include": "scripts/installer-hooks.nsh"
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "ayronny14-alt",
+      "repo": "Rook"
+    },
+    "directories": {
+      "output": "../dist"
+    }
+  }
+}

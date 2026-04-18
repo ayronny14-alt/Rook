@@ -1,0 +1,15 @@
+{
+  "name": "rook-workspace",
+  "version": "0.1.0",
+  "description": "Rook — unified Electron + Rust workspace root",
+  "private": true,
+  "scripts": {
+    "dev": "cd frontend && npm run dev",
+    "build": "cd frontend && npm run build",
+    "build:backend": "cd frontend && npm run build:backend",
+    "release": "cd frontend && npm run release",
+    "start": "cd frontend && npm run start"
+  },
+  "author": "",
+  "license": "ISC"
+}

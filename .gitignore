@@ -1,0 +1,47 @@
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.npm/
+
+# Rust
+target/
+**/*.rs.bk
+*.pdb
+
+# Electron-builder output
+dist/
+build/
+out/
+
+# Env files
+.env
+.env.*
+!.env.example
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs / temp / cache
+*.log
+*.tmp
+*.temp
+.cache/
+
+# Windows build deps
+nuget.exe
+packages/
+
+# Personal / agent scratchpads — not shipped
+CLAUDE.md
+.claude/
+.docu/
