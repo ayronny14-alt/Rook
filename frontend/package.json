@@ -1,6 +1,6 @@
 {
   "name": "rook",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Rook AI Assistant – Electron frontend",
   "main": "src/main.js",
   "scripts": {
@@ -31,10 +31,17 @@
     "beforeBuild": "scripts/verify-backend.js",
     "files": [
       "src/**/*",
-      "!src/**/*.map",
+      "node_modules/**/*",
+      "package.json",
       "!**/.env",
       "!**/.env.*",
-      "!**/node_modules/.cache"
+      "!**/*.map",
+      "!**/node_modules/.cache",
+      "!**/node_modules/**/{CHANGELOG.md,README.md,readme.md,CONTRIBUTING.md,LICENSE,license,*.d.ts,*.md}",
+      "!**/node_modules/**/test/**",
+      "!**/node_modules/**/tests/**",
+      "!**/node_modules/**/.bin",
+      "!**/node_modules/**/.github"
     ],
     "extraResources": [
       {
