@@ -35,12 +35,9 @@ impl BrowserAutomation {
 
         let mut _cmd = Command::new(chrome_path);
 
-
         _cmd.args(&args);
 
-
         crate::os::hide(&mut _cmd);
-
 
         let child = _cmd.spawn()?;
 

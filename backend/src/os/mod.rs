@@ -22,8 +22,12 @@ mod win {
 
 #[cfg(not(windows))]
 mod win {
-    pub fn hide(cmd: &mut std::process::Command) -> &mut std::process::Command { cmd }
-    pub fn hide_tokio(cmd: &mut tokio::process::Command) -> &mut tokio::process::Command { cmd }
+    pub fn hide(cmd: &mut std::process::Command) -> &mut std::process::Command {
+        cmd
+    }
+    pub fn hide_tokio(cmd: &mut tokio::process::Command) -> &mut tokio::process::Command {
+        cmd
+    }
 }
 
 pub use win::{hide, hide_tokio};
