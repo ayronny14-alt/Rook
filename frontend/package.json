@@ -1,6 +1,6 @@
 {
   "name": "rook",
-  "version": "0.1.5",
+  "version": "0.1.7",
   "description": "Rook AI Assistant – Electron frontend",
   "main": "src/main.js",
   "scripts": {
@@ -20,6 +20,9 @@
   "dependencies": {
     "electron-updater": "^6.8.3"
   },
+  "bundledDependencies": [
+    "electron-updater"
+  ],
   "devDependencies": {
     "electron": "^41.1.1",
     "electron-builder": "^25.1.8"
@@ -48,7 +51,9 @@
       "target": [
         {
           "target": "nsis",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ],
       "artifactName": "Rook-Setup-${version}.exe"

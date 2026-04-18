@@ -64,7 +64,20 @@ if (!gotSingleInstanceLock) {
   });
 }
 
-const { autoUpdater } = require('electron-updater');
+// electron-updater is a production dep — should always be present.
+// if for some reason it's missing, fall back to a no-op stub so the app starts.
+let autoUpdater;
+try {
+  autoUpdater = require('electron-updater').autoUpdater;
+} catch (e) {
+  console.error('[updater] electron-updater not found, auto-update disabled:', e.message);
+  autoUpdater = {
+    autoDownload: false, autoInstallOnAppQuit: false,
+    on: () => {}, checkForUpdates: () => Promise.resolve(null),
+    downloadUpdate: () => Promise.reject(new Error('updater unavailable')),
+    quitAndInstall: () => {},
+  };
+}
 
 const UPDATE_CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000;
 const UPDATE_FOCUS_MIN_MS = 2 * 60 * 1000;
