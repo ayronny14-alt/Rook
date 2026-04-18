@@ -475,20 +475,25 @@ pub async fn write_mcp_json(
 /// Check if a program is on PATH (handles Windows .cmd wrappers via cmd /c).
 async fn which_available(program: &str) -> bool {
     #[cfg(target_os = "windows")]
-    let result = tokio::process::Command::new("cmd")
-        .args(["/c", program, "--version"])
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .status()
-        .await;
+    let result = {
+        let mut cmd = tokio::process::Command::new("cmd");
+        crate::os::hide_tokio(&mut cmd)
+            .args(["/c", program, "--version"])
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+            .await
+    };
 
     #[cfg(not(target_os = "windows"))]
-    let result = tokio::process::Command::new(program)
-        .arg("--version")
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .status()
-        .await;
+    let result = {
+        let mut cmd = tokio::process::Command::new(program);
+        cmd.arg("--version")
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+            .await
+    };
 
     result.map(|s| s.success()).unwrap_or(false)
 }

@@ -8,6 +8,7 @@
 #![allow(clippy::type_complexity)]
 
 mod computer_use;
+mod error_log;
 mod indexer;
 mod ipc;
 mod llm;

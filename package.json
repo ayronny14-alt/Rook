@@ -1,7 +1,7 @@
 {
   "name": "rook-workspace",
   "version": "0.1.7",
-  "description": "Rook — unified Electron + Rust workspace root",
+  "description": "Rook - unified Electron + Rust workspace root",
   "private": true,
   "scripts": {
     "dev": "cd frontend && npm run dev",

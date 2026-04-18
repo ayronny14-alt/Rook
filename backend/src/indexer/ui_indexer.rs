@@ -53,7 +53,8 @@ try {
 }
 "#;
 
-        let output = tokio::process::Command::new("powershell")
+        let mut ps = tokio::process::Command::new("powershell");
+        let output = crate::os::hide_tokio(&mut ps)
             .args(["-NoProfile", "-NonInteractive", "-Command", script])
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::null())

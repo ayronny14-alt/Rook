@@ -518,6 +518,13 @@ ipcMain.on('win-minimize', () => mainWindow?.minimize());
 ipcMain.on('win-maximize', () => mainWindow?.isMaximized() ? mainWindow.unmaximize() : mainWindow?.maximize());
 ipcMain.on('win-close',    () => mainWindow?.close());
 
+ipcMain.handle('get-pipe-status', () => ({
+  connected: !!pipeReady,
+  reconnecting: !pipeReady && !isShuttingDown,
+  attempt: reconnectAttempt,
+  backendRestarts: backendManager.getRestartCount(),
+}));
+
 // Manual reconnect trigger from renderer
 ipcMain.on('reconnect-now', () => {
   if (retryTimer) { clearTimeout(retryTimer); retryTimer = null; }

@@ -1,769 +1,1248 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="paper">
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <title>Rook</title>
+  <link rel="stylesheet" href="style.css"/>
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
-  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,300;12..96,400;12..96,500;12..96,600&family=DM+Serif+Display:ital@0;1&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet"/>
-  <link rel="stylesheet" href="style.css"/>
-  <!-- Syntax highlighting — dark theme matching the app palette -->
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.10.0/styles/atom-one-dark.min.css" crossorigin="anonymous" integrity="sha512-Jk4AqjWsdSzSWCSuQTfYRIF84Rq/eV0G2+tu07byYwHcbTGfdmLrHjUSwvzp5HvbiqK4ibmNwdcG49Y5RGYPTg==" />
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
 </head>
 <body>
+<div id="root"></div>
 
-<!-- ══════════════════════════════════════════════════
-     STARTUP OVERLAY — shown while backend boots
-═══════════════════════════════════════════════════ -->
-<div id="startup-overlay">
-  <div id="startup-box">
-    <div id="startup-marker">— LOADING WORKSPACE</div>
-    <div id="startup-title">Rook</div>
-    <div id="startup-status">
-      <span class="live-dot" aria-hidden="true"></span>
-      <span id="startup-status-text">Starting backend</span>
-    </div>
-    <div id="startup-steps" class="hidden"></div>
-    <div id="startup-log-wrap"><div id="startup-log"></div></div>
-  </div>
-</div>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
-<!-- onboarding removed: Rook is BYO-API-key, no account flow. -->
-<div id="onboarding-overlay" class="hidden"></div>
+<script type="text/babel" data-presets="react">
+// ── helpers ──────────────────────────────────────────────
 
-<!-- ══════════════════════════════════════════════════
-     MAIN APP
-═══════════════════════════════════════════════════ -->
-<div id="app" class="hidden">
+const uid = () => Math.random().toString(36).slice(2, 10);
 
-  <!-- Custom titlebar -->
-  <div id="titlebar">
-    <div id="titlebar-drag">
-      <svg width="16" height="16" viewBox="0 0 48 48" fill="none">
-        <circle cx="24" cy="24" r="22" stroke="#C86E3D" stroke-width="3"/>
-        <path d="M14 24h20M24 14v20" stroke="#C86E3D" stroke-width="3" stroke-linecap="round"/>
-      </svg>
-      <span>Rook</span>
-    </div>
-    <div id="win-controls">
-      <button class="wbtn" id="btn-min">&#8722;</button>
-      <button class="wbtn" id="btn-max">&#9633;</button>
-      <button class="wbtn danger" id="btn-close">&#10005;</button>
-    </div>
-  </div>
+function relativeTime(ts) {
+  if (!ts) return 'now';
+  const diff = Date.now() - new Date(ts).getTime();
+  const m = Math.floor(diff / 60000);
+  if (m < 1) return 'now';
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  const d = Math.floor(h / 24);
+  if (d === 1) return 'yesterday';
+  if (d < 7) return `${d} days ago`;
+  return new Date(ts).toLocaleDateString('en', { month: 'short', day: 'numeric' });
+}
 
-  <!-- Shell -->
-  <div id="shell">
+const TYPE_MAP = {
+  person: 'person', people: 'person', human: 'person', user: 'person',
+  place: 'place', location: 'place', city: 'place', country: 'place', region: 'place',
+  tool: 'thing', technology: 'thing', app: 'thing', software: 'thing', thing: 'thing', object: 'thing', file: 'thing', document: 'thing',
+  concept: 'fact', belief: 'fact', fact: 'fact', preference: 'fact', rule: 'fact', note: 'fact', memory: 'fact', observation: 'fact',
+  project: 'project', repo: 'project', product: 'project', codebase: 'project',
+  skill: 'skill', capability: 'skill', expertise: 'skill', language: 'skill',
+};
+function mapType(t) { return TYPE_MAP[(t || '').toLowerCase()] || 'thing'; }
 
-    <!-- ── Activity bar ── -->
-    <nav id="activity-bar">
-      <div id="ab-top">
-        <button class="ab-btn active" data-page="chat"     title="Chat">
-          <svg viewBox="0 0 20 20" fill="none"><path d="M3 4h14a1 1 0 011 1v8a1 1 0 01-1 1H7l-4 3V5a1 1 0 011-1z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>
-        </button>
-        <button class="ab-btn" data-page="memory"  title="Memory">
-          <svg viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="7" stroke="currentColor" stroke-width="1.4"/><circle cx="10" cy="10" r="2.5" fill="currentColor"/><path d="M10 3v2M10 15v2M3 10h2M15 10h2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
-        </button>
-        <button class="ab-btn" data-page="skills"  title="Skills">
-          <svg viewBox="0 0 20 20" fill="none"><path d="M10 2l2.4 5 5.6.8-4 3.9.9 5.5L10 14.5l-4.9 2.7.9-5.5L2 7.8l5.6-.8L10 2z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>
-        </button>
-        <button class="ab-btn" data-page="plugins" title="Plugins">
-          <svg viewBox="0 0 20 20" fill="none"><rect x="3" y="3" width="6" height="6" rx="1" stroke="currentColor" stroke-width="1.4"/><rect x="11" y="3" width="6" height="6" rx="1" stroke="currentColor" stroke-width="1.4"/><rect x="3" y="11" width="6" height="6" rx="1" stroke="currentColor" stroke-width="1.4"/><path d="M14 11v6M11 14h6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
-        </button>
-      </div>
-      <div id="ab-bottom">
-        <button class="ab-btn" data-page="settings" title="Settings">
-          <svg viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="2.5" stroke="currentColor" stroke-width="1.4"/><path d="M10 2v2m0 12v2M2 10h2m12 0h2m-3.17-5.66-1.42 1.42M6.59 13.41l-1.42 1.42m0-9.25 1.42 1.42m6.82 6.82 1.42 1.42" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
-        </button>
-        <!-- Connection dot -->
-        <div id="conn-dot" class="offline" title="Backend offline" role="status" aria-live="polite" aria-label="Backend offline"></div>
-      </div>
-    </nav>
+// Dedupe by normalized label, cap to ~60 highest-scored, spread via
+// golden-ratio spiral so the graph doesn't read as one dense clump.
+function backendNodesToGraph(nodes) {
+  const byLabel = new Map();
+  (nodes || []).forEach(n => {
+    const key = (n.title || n.label || n.node_id || '').toLowerCase().trim();
+    if (!key) return;
+    const score = n.total_score || n.confidence_score || 0.5;
+    const prev  = byLabel.get(key);
+    if (!prev || (prev._score || 0) < score) byLabel.set(key, { ...n, _score: score });
+  });
 
-    <!-- ── Pages ── -->
-    <div id="pages">
+  const deduped = Array.from(byLabel.values())
+    .sort((a, b) => (b._score || 0) - (a._score || 0))
+    .slice(0, 60);
 
-      <!-- CHAT PAGE -->
-      <div class="page active" id="page-chat">
-        <div id="chat-sidebar">
-          <div id="sidebar-brand">
-            <span class="live-dot" aria-hidden="true"></span>
-            <span class="sidebar-brand-name">Rook</span>
-            <span class="sidebar-brand-tag" id="sidebar-version-tag">v1</span>
-          </div>
-          <button id="btn-new-chat">
-            <svg viewBox="0 0 16 16" fill="none"><path d="M8 2v12M2 8h12" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
-            New chat
-            <span class="kbd-hint">⌘N</span>
-          </button>
-          <!-- Reconnect banner — shown when backend is disconnected -->
-          <div id="reconnect-banner" class="hidden">
-            <svg viewBox="0 0 16 16" fill="none" width="13" height="13"><circle cx="8" cy="8" r="6.5" stroke="currentColor" stroke-width="1.3"/><path d="M8 5v3.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="8" cy="11" r=".8" fill="currentColor"/></svg>
-            <span id="reconnect-status-text">Reconnecting…</span>
-            <button id="btn-reconnect-now">Retry now</button>
-          </div>
-          <div id="update-banner" class="hidden" role="status" aria-live="polite">
-            <div class="update-banner-head">
-              <span class="update-banner-kicker">Update available</span>
-              <button id="btn-update-dismiss" class="update-banner-close" aria-label="Dismiss update notice">Later</button>
+  const PHI = Math.PI * (3 - Math.sqrt(5));
+  const count = deduped.length;
+  const mapped = deduped.map((n, i) => {
+    const t = count > 1 ? i / (count - 1) : 0;
+    const radius = 6 + Math.sqrt(t) * 40;
+    const theta  = i * PHI;
+    const score  = n._score || 0.5;
+    return {
+      id: n.node_id || n.id,
+      t: mapType(n.node_type || n.type),
+      x: 50 + radius * Math.cos(theta),
+      y: 50 + radius * Math.sin(theta),
+      r: score > 0.7 ? 3 : score > 0.4 ? 2 : 1,
+      label: n.title || n.label || n.node_id || '?',
+      live: false,
+    };
+  });
+  return { nodes: mapped, edges: [] };
+}
+
+function backendConvsToSessions(convs) {
+  return (convs || []).map(c => ({
+    id: c.id,
+    title: c.title || 'Untitled',
+    when: relativeTime(c.updated_at),
+    mins: c.message_count || 0,
+    touched: [],
+    created: [],
+    live: false,
+  }));
+}
+
+function backendSkillsToPlugins(items) {
+  return (items || []).map(s => {
+    // plugin_type from list_plugins: "skill" | "mcp" | "connector"
+    const pt = (s.plugin_type || s.kind || '').toLowerCase();
+    const kind = pt === 'mcp' ? 'MCP' : pt === 'connector' ? 'Connector' : 'Skill';
+    return {
+      id:   s.id || s.name,
+      name: s.name || s.id || 'unknown',
+      kind,
+      cat:  s.category || s.cat || (s.owner ? s.owner : 'Other'),
+      desc: s.description || s.desc || '',
+      stars: s.stars || 0,
+      installed: !!(s.enabled || s.installed || s.running || s.active),
+    };
+  });
+}
+
+const NODE_TYPES = {
+  person:  { label: 'person',  color: 'var(--node-person)'  },
+  place:   { label: 'place',   color: 'var(--node-place)'   },
+  thing:   { label: 'thing',   color: 'var(--node-thing)'   },
+  fact:    { label: 'fact',    color: 'var(--node-fact)'    },
+  project: { label: 'project', color: 'var(--node-project)' },
+  skill:   { label: 'skill',   color: 'var(--node-skill)'   },
+};
+// keep window.ROOK_DATA populated for NodeChip reads
+window.ROOK_DATA = { NODE_TYPES, GRAPH: { nodes: [], edges: [] }, SESSIONS: [], PLUGINS: [] };
+
+// ── Backend context ───────────────────────────────────────
+
+const BackendCtx = React.createContext(null);
+
+function BackendProvider({ children }) {
+  const [pipeOk,     setPipeOk]     = React.useState(false);
+  const [version,    setVersion]    = React.useState('');
+  const [graph,      setGraph]      = React.useState({ nodes: [], edges: [] });
+  const [sessions,   setSessions]   = React.useState([]);
+  const [plugins,    setPlugins]    = React.useState([]);
+  const [curatedIds, setCuratedIds] = React.useState([]);
+
+  // chat state
+  const [convId,     setConvId]     = React.useState(null);
+  const [convTitle,  setConvTitle]  = React.useState('New conversation');
+  const [msgs,       setMsgs]       = React.useState([]);
+  const [streaming,  setStreaming]  = React.useState(false);
+  const [mode,       setMode]       = React.useState('chat');
+  const [approval,   setApproval]   = React.useState(null);
+
+  const streamRef  = React.useRef('');
+  const convIdRef  = React.useRef(null);
+
+  // keep ref in sync so closures in onMessage see current value
+  React.useEffect(() => { convIdRef.current = convId; }, [convId]);
+
+  // sync graph + sessions to window.ROOK_DATA so NodeChip works
+  React.useEffect(() => { window.ROOK_DATA.GRAPH    = graph;    }, [graph]);
+  React.useEffect(() => { window.ROOK_DATA.SESSIONS = sessions; }, [sessions]);
+  React.useEffect(() => { window.ROOK_DATA.PLUGINS  = plugins;  }, [plugins]);
+
+  React.useEffect(() => {
+    if (!window.rook) return;
+
+    window.rook.getAppVersion().then(v => setVersion(v || '')).catch(() => {});
+
+    window.rook.send({ type: 'get_conversations', id: uid() });
+    window.rook.send({ type: 'query_memory',      id: uid(), query: '', limit: 100 });
+    window.rook.send({ type: 'list_skills',       id: uid() });
+    window.rook.send({ type: 'list_plugins',      id: uid() });
+    window.rook.send({ type: 'health_check',      id: uid() });
+
+    const unsub = window.rook.onMessage(msg => {
+      switch (msg.type) {
+        case 'memory_results':
+          setGraph(backendNodesToGraph(msg.nodes));
+          break;
+
+        case 'context_curated':
+          setCuratedIds((msg.nodes || []).map(n => n.node_id || n.id));
+          break;
+
+        case 'conversation_list': {
+          const convs = msg.conversations || [];
+          setSessions(backendConvsToSessions(convs));
+          if (!convIdRef.current && convs.length > 0) {
+            const first = convs[0];
+            setConvId(first.id);
+            setConvTitle(first.title || 'Untitled');
+            window.rook.send({ type: 'get_conversation_messages', id: uid(), conversation_id: first.id });
+          }
+          break;
+        }
+
+        case 'conversation_messages':
+          if (msg.conversation_id === convIdRef.current || !convIdRef.current) {
+            setMsgs((msg.messages || []).map(m => ({
+              role: m.role === 'user' ? 'user' : 'assistant',
+              text: m.content || '',
+            })));
+          }
+          break;
+
+        case 'conversation_titled':
+          if (msg.conversation_id === convIdRef.current)
+            setConvTitle(msg.title || '');
+          // update in sessions list too
+          setSessions(prev => prev.map(s =>
+            s.id === msg.conversation_id ? { ...s, title: msg.title || s.title } : s
+          ));
+          break;
+
+        case 'chat_chunk':
+          if (msg.token) {
+            streamRef.current += msg.token;
+            const snap = streamRef.current;
+            setMsgs(prev => {
+              const last = prev[prev.length - 1];
+              if (last?.role === 'assistant' && last._streaming)
+                return [...prev.slice(0, -1), { ...last, text: snap }];
+              return [...prev, { role: 'assistant', text: snap, _streaming: true }];
+            });
+          }
+          break;
+
+        case 'chat_done':
+        case 'chat':
+          streamRef.current = '';
+          setStreaming(false);
+          setMsgs(prev => {
+            const last = prev[prev.length - 1];
+            if (last?._streaming)
+              return [...prev.slice(0, -1), { ...last, _streaming: false }];
+            if (msg.content)
+              return [...prev, { role: 'assistant', text: msg.content }];
+            return prev;
+          });
+          window.rook.send({ type: 'query_memory', id: uid(), query: '', limit: 100 });
+          window.rook.send({ type: 'get_conversations', id: uid() });
+          break;
+
+        case 'pending_tool_approval':
+          setApproval(msg);
+          break;
+
+        case 'cancelled':
+          streamRef.current = '';
+          setStreaming(false);
+          setApproval(null);
+          setMsgs(prev => {
+            const last = prev[prev.length - 1];
+            if (last?._streaming)
+              return [...prev.slice(0, -1), { ...last, _streaming: false, text: last.text || '(cancelled)' }];
+            return prev;
+          });
+          break;
+
+        case 'skills_list':
+        case 'plugin_list': {
+          // merge results from both list_skills and list_plugins — skills are
+          // file-based (.docu/skills), plugins are installed MCPs/connectors.
+          const incoming = backendSkillsToPlugins(msg.skills || msg.plugins || []);
+          setPlugins(prev => {
+            const map = new Map();
+            for (const p of prev) map.set(p.id || p.name, p);
+            for (const p of incoming) map.set(p.id || p.name, p);
+            return Array.from(map.values());
+          });
+          break;
+        }
+
+        case 'config_updated':
+          break;
+
+        case 'error':
+          streamRef.current = '';
+          setStreaming(false);
+          setMsgs(prev => {
+            const last = prev[prev.length - 1];
+            if (last?._streaming)
+              return [...prev.slice(0, -1), { ...last, _streaming: false, text: last.text || '(error)' }];
+            return prev;
+          });
+          console.error('[rook]', msg.message);
+          break;
+      }
+    });
+
+    const unsubPipe = window.rook.onPipeStatus(s => {
+      // main.js emits an object {connected, reconnecting, attempt, ...}
+      const ok = typeof s === 'object' ? !!s.connected : s === 'connected';
+      setPipeOk(ok);
+      if (ok) {
+        window.rook.send({ type: 'get_conversations', id: uid() });
+        window.rook.send({ type: 'query_memory',      id: uid(), query: '', limit: 200 });
+        window.rook.send({ type: 'list_skills',       id: uid() });
+      }
+    });
+
+    // pull current pipe state directly — the 'connect' event may fire before
+    // this subscription attaches, and we don't want to guess.
+    const poll = () => {
+      if (!window.rook?.getPipeStatus) return;
+      window.rook.getPipeStatus().then(s => {
+        if (s && typeof s.connected === 'boolean') setPipeOk(s.connected);
+      }).catch(() => {});
+    };
+    poll();
+    const pollTimer = setInterval(poll, 2000);
+
+    return () => {
+      clearInterval(pollTimer);
+      try { unsub && unsub(); } catch (_) {}
+      try { unsubPipe && unsubPipe(); } catch (_) {}
+    };
+  }, []);
+
+  function sendChat(text) {
+    if (!text.trim() || streaming) return;
+    const chatId = uid();
+    setMsgs(prev => [...prev, { role: 'user', text }]);
+    setStreaming(true);
+    streamRef.current = '';
+    window.rook.send({ type: 'chat', id: chatId, conversation_id: convId || undefined, message: text, agent_mode: mode });
+  }
+
+  function stopChat() {
+    if (!streaming) return;
+    window.rook.send({ type: 'cancel_request', id: uid() });
+  }
+
+  function newConversation() {
+    setConvId(null);
+    setConvTitle('New conversation');
+    setMsgs([]);
+    setStreaming(false);
+    setApproval(null);
+    streamRef.current = '';
+  }
+
+  function loadConversation(id, title) {
+    if (id === convId) return;
+    setConvId(id);
+    setConvTitle(title || 'Untitled');
+    setMsgs([]);
+    setStreaming(false);
+    setApproval(null);
+    streamRef.current = '';
+    window.rook.send({ type: 'get_conversation_messages', id: uid(), conversation_id: id });
+  }
+
+  function approveTools(ok) {
+    if (!approval) return;
+    window.rook.send({ type: 'approve_pending_tools', id: uid(), conversation_id: approval.conversation_id, approved: ok });
+    setApproval(null);
+  }
+
+  function saveSettings(cfg) {
+    window.rook.saveEnvSettings(cfg);
+    window.rook.send({ type: 'update_config', id: uid(), base_url: cfg.apiUrl || '', api_key: cfg.apiKey || '', model: cfg.model || '' });
+  }
+
+  const ctx = {
+    pipeOk, version,
+    graph, sessions, plugins, curatedIds,
+    convId, convTitle, msgs, streaming, mode, setMode, approval,
+    sendChat, stopChat, newConversation, loadConversation, approveTools, saveSettings,
+  };
+
+  return <BackendCtx.Provider value={ctx}>{children}</BackendCtx.Provider>;
+}
+
+function useBackend() { return React.useContext(BackendCtx); }
+
+// ── Primitives ────────────────────────────────────────────
+
+function NodeChip({ id, onHover, onClick }) {
+  const node = (window.ROOK_DATA.GRAPH.nodes || []).find(n => n.id === id);
+  if (!node) return <span className="mono" style={{fontSize:12,color:'var(--ink-4)'}}>[{id}]</span>;
+  return (
+    <span
+      className={`nodechip nodechip-${node.t}`}
+      onMouseEnter={() => onHover && onHover(id)}
+      onMouseLeave={() => onHover && onHover(null)}
+      onClick={() => onClick && onClick(id)}
+      title={`${node.t} · ${node.label}`}
+    >
+      <span className="nodechip-dot"/>
+      <span>{node.label}</span>
+    </span>
+  );
+}
+
+// ── Graph ─────────────────────────────────────────────────
+
+function renderGlyph(type, x, y, r, color, solid) {
+  if (type === 'person') return (
+    <>
+      <circle cx={x} cy={y} r={r} fill={color}/>
+      <circle cx={x} cy={y} r={r + 2.5} fill="none" stroke={color} strokeWidth=".7" opacity=".6"/>
+    </>
+  );
+  if (type === 'place') {
+    const s = r + 1;
+    return <polygon points={`${x},${y-s} ${x+s},${y} ${x},${y+s} ${x-s},${y}`} fill={solid ? color : 'var(--bg)'} stroke={color} strokeWidth="1.2"/>;
+  }
+  if (type === 'thing') {
+    const s = r;
+    return <rect x={x-s} y={y-s} width={s*2} height={s*2} fill={solid ? color : 'var(--bg)'} stroke={color} strokeWidth="1.2"/>;
+  }
+  if (type === 'fact') return (
+    <g stroke={color} strokeWidth="1.4" strokeLinecap="round">
+      <line x1={x-r} y1={y} x2={x+r} y2={y}/>
+      <line x1={x} y1={y-r} x2={x} y2={y+r}/>
+    </g>
+  );
+  if (type === 'project') {
+    const pts = [];
+    for (let i = 0; i < 6; i++) {
+      const a = (Math.PI / 3) * i - Math.PI / 6;
+      pts.push(`${x + Math.cos(a) * (r+1)},${y + Math.sin(a) * (r+1)}`);
+    }
+    return <polygon points={pts.join(' ')} fill={color} stroke={color} strokeWidth="1.2" opacity={solid ? 1 : .85}/>;
+  }
+  if (type === 'skill') {
+    const s = r + 1;
+    return <polygon points={`${x},${y-s} ${x+s},${y+s*.8} ${x-s},${y+s*.8}`} fill={solid ? color : 'var(--bg)'} stroke={color} strokeWidth="1.2"/>;
+  }
+  return <circle cx={x} cy={y} r={r} fill={color}/>;
+}
+
+function Graph({ width = 900, height = 620, highlightIds = [], recentIds = [], onNodeHover, onNodeClick, selectedId, showLabels = true, variant = 'atlas' }) {
+  const { GRAPH, NODE_TYPES: NT } = window.ROOK_DATA;
+  const hiSet     = new Set(highlightIds);
+  const recentSet = new Set(recentIds);
+  const pad = variant === 'ambient' ? 20 : 40;
+  const toX = x => pad + (x / 100) * (width  - pad * 2);
+  const toY = y => pad + (y / 100) * (height - pad * 2);
+  const nodeById = id => GRAPH.nodes.find(n => n.id === id);
+  const rFor = tier => ({ 1: 4, 2: 6, 3: 9 }[tier] || 4);
+
+  return (
+    <svg className="graph-svg" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="xMidYMid meet">
+      <g>
+        {(GRAPH.edges || []).map((e, i) => {
+          const a = nodeById(e.a), b = nodeById(e.b);
+          if (!a || !b) return null;
+          const active  = hiSet.has(a.id) && hiSet.has(b.id);
+          const touched = recentSet.has(a.id) || recentSet.has(b.id);
+          return (
+            <line key={i}
+              x1={toX(a.x)} y1={toY(a.y)} x2={toX(b.x)} y2={toY(b.y)}
+              stroke={active ? 'var(--signal)' : 'var(--ink-3)'}
+              strokeWidth={active ? 1.4 : Math.max(0.5, (e.w || 0.5) * 1.1)}
+              opacity={active ? 0.85 : touched ? 0.45 : 0.32}
+              strokeDasharray={e.contrastive ? '3 3' : 'none'}
+            />
+          );
+        })}
+      </g>
+      <g>
+        {GRAPH.nodes.filter(n => n.live).map(n => (
+          <circle key={'p'+n.id} cx={toX(n.x)} cy={toY(n.y)} r={rFor(n.r)+4}
+            fill="none" stroke="var(--signal)" strokeWidth=".8" opacity=".5">
+            <animate attributeName="r" from={rFor(n.r)+4} to={rFor(n.r)+14} dur="2.4s" repeatCount="indefinite"/>
+            <animate attributeName="opacity" from=".55" to="0" dur="2.4s" repeatCount="indefinite"/>
+          </circle>
+        ))}
+      </g>
+      <g>
+        {GRAPH.nodes.map(n => {
+          const r      = rFor(n.r);
+          const isHi   = hiSet.has(n.id);
+          const isRec  = recentSet.has(n.id);
+          const isSel  = selectedId === n.id;
+          const nt     = NT[n.t] || NT.thing;
+          const color  = (n.live || isHi) ? 'var(--signal)' : nt.color;
+          return (
+            <g key={n.id} style={{ cursor: 'pointer' }}
+               onMouseEnter={() => onNodeHover && onNodeHover(n.id)}
+               onMouseLeave={() => onNodeHover && onNodeHover(null)}
+               onClick={() => onNodeClick && onNodeClick(n.id)}>
+              {isSel && <circle cx={toX(n.x)} cy={toY(n.y)} r={r+7} fill="none" stroke="var(--ink)" strokeWidth="1"/>}
+              {renderGlyph(n.t, toX(n.x), toY(n.y), r, color, isHi || isRec)}
+              {showLabels && (n.r >= 2 || isHi || isSel || isRec) && (
+                <text
+                  x={toX(n.x) + r + 5} y={toY(n.y) + 3}
+                  fontSize={n.r >= 3 ? 12 : 10}
+                  fontFamily={n.r >= 3 ? 'var(--fs-display)' : 'var(--fs-mono)'}
+                  fontStyle={n.r >= 3 ? 'italic' : 'normal'}
+                  fill={isHi ? 'var(--signal-ink)' : 'var(--ink-2)'}
+                  letterSpacing={n.r >= 3 ? '0' : '.04em'}
+                >{n.label}</text>
+              )}
+            </g>
+          );
+        })}
+      </g>
+    </svg>
+  );
+}
+
+// ── Chat ─────────────────────────────────────────────────
+
+function Chat({ onHoverNode, selectedNode, onSelectNode }) {
+  const { convTitle, msgs, streaming, sendChat, stopChat, curatedIds, approval, approveTools, mode, setMode } = useBackend();
+  const [hoveredChip, setHoveredChip] = React.useState(null);
+  const [input, setInput] = React.useState('');
+  const streamEl = React.useRef(null);
+  const taRef    = React.useRef(null);
+
+  React.useEffect(() => { onHoverNode && onHoverNode(hoveredChip); }, [hoveredChip]);
+
+  // follow the stream — also watch the last message's text length so growing
+  // assistant tokens keep scrolling, not just new messages.
+  const tailLen = msgs.length > 0 ? (msgs[msgs.length - 1].text || '').length : 0;
+  React.useEffect(() => {
+    if (streamEl.current) streamEl.current.scrollTop = streamEl.current.scrollHeight;
+  }, [msgs.length, tailLen, streaming]);
+
+  const resetTaHeight = () => {
+    if (taRef.current) taRef.current.style.height = 'auto';
+  };
+
+  const send = () => {
+    const text = input.trim();
+    if (!text || streaming) return;
+    sendChat(text);
+    setInput('');
+    resetTaHeight();
+  };
+
+  const onKeyDown = e => {
+    // don't submit mid-IME composition (Chinese/Japanese/Korean)
+    if (e.isComposing || e.nativeEvent?.isComposing || e.keyCode === 229) return;
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
+  };
+
+  const autoResize = e => {
+    const el = e.target;
+    el.style.height = 'auto';
+    el.style.height = Math.min(200, el.scrollHeight) + 'px';
+  };
+
+  return (
+    <div className="chat-col-wrap">
+      <section className="chat-stream" ref={streamEl}>
+        <div className="chat-stream-inner">
+          {msgs.length === 0 && !streaming ? (
+            <div className="chat-empty">
+              <div className="chat-empty-mark"/>
+              <div className="chat-empty-title">a quiet morning, then</div>
+              <p className="chat-empty-sub">
+                say something. rook listens, remembers, draws a map of you over time.
+                the memory pane in the corner is the map so far.
+              </p>
             </div>
-            <div class="update-banner-title">Rook <span id="update-version-label">v0.0.0</span></div>
-            <div id="update-notes" class="update-banner-notes hidden"></div>
-            <div id="update-progress-text" class="update-banner-status hidden"></div>
-            <div id="update-progress-wrap" class="update-progress hidden"><div id="update-progress-bar"></div></div>
-            <div class="update-banner-actions">
-              <button id="btn-update-now">Update Now</button>
-            </div>
-          </div>
-          <!-- Conversation search -->
-          <div id="sidebar-search-wrap">
-            <input id="sidebar-search" type="text" placeholder="Search conversations…" autocomplete="off"/>
-          </div>
-          <!-- Indexed folder indicator -->
-          <div id="index-folder-bar" class="hidden">
-            <svg viewBox="0 0 16 16" fill="none" width="11" height="11"><path d="M2 4h5l1.5 2H14v7H2V4z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg>
-            <span id="index-folder-name"></span>
-            <span id="index-folder-status" class="index-status-dot"></span>
-          </div>
-          <button id="btn-index-folder" title="Index a local folder for semantic search">
-            <svg viewBox="0 0 16 16" fill="none" width="12" height="12"><path d="M2 4h5l1.5 2H14v7H2V4z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg>
-            Index folder
-          </button>
-          <div id="conv-list-wrap">
-            <ul id="conversation-list"></ul>
-          </div>
+          ) : (
+            <>
+              <header className="chat-session-head">
+                <h1 className="chat-session-title">{convTitle}</h1>
+                <div className="chat-session-meta">
+                  <span>{new Date().toLocaleDateString('en', { weekday: 'short', hour: 'numeric', minute: '2-digit' })}</span>
+                  {curatedIds.length > 0 && <><span className="dotm"/><span>{curatedIds.length} nodes retrieved</span></>}
+                </div>
+              </header>
+
+              {msgs.map((m, i) => (
+                <Msg key={i} m={m} onHoverChip={setHoveredChip} onClickChip={onSelectNode}/>
+              ))}
+
+              {curatedIds.length > 0 && (
+                <div className="traversal-trail">
+                  <span className="tt-lbl">retrieved</span>
+                  {curatedIds.slice(0, 8).map((id, i) => (
+                    <React.Fragment key={id}>
+                      {i > 0 && <span>·</span>}
+                      <span style={{fontSize:12,color:'var(--signal-ink)',cursor:'pointer'}} onClick={() => onSelectNode && onSelectNode(id)}>
+                        {(window.ROOK_DATA.GRAPH.nodes.find(n => n.id === id) || {}).label || id}
+                      </span>
+                    </React.Fragment>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
         </div>
-        <div id="chat-main">
-          <div id="chat-header">
-            <span id="chat-title">New Conversation</span>
-            <span id="mock-badge" class="hidden" title="No API key — backend is returning deterministic placeholder responses. Add a key in Settings.">MOCK</span>
-            <div id="header-right">
-              <div id="model-select-wrap">
-                <select id="model-select">
-                  <option value="">Loading models…</option>
-                </select>
-                <button id="btn-refresh-models" class="header-icon-btn" title="Refresh model list" aria-label="Refresh model list">
-                  <svg viewBox="0 0 16 16" fill="none" width="12" height="12"><path d="M13.5 8A5.5 5.5 0 1 1 8 2.5a5.5 5.5 0 0 1 3.89 1.61L13.5 2.5v4h-4l1.46-1.46A3.5 3.5 0 1 0 11.5 8" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                </button>
-              </div>
-              <button id="btn-export-chat" class="header-icon-btn" aria-label="Export conversation as Markdown" title="Export conversation (.md)">
-                <svg viewBox="0 0 20 20" fill="none" width="14" height="14">
-                  <path d="M10 3v10M6 9l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-                  <path d="M4 15h12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+      </section>
+
+      <div className="chat-fade"/>
+
+      {approval && (
+        <div className="approval-bar">
+          <span>{approval.tool_name || 'tool'} — approve?</span>
+          <span style={{fontSize:12,color:'var(--ink-4)',flex:1,marginLeft:8,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+            {approval.description || ''}
+          </span>
+          <button className="btn btn-solid" onClick={() => approveTools(true)}>allow</button>
+          <button className="btn btn-danger" onClick={() => approveTools(false)}>deny</button>
+        </div>
+      )}
+
+      <div className="composer">
+        <textarea
+          ref={taRef}
+          value={input}
+          onChange={e => { setInput(e.target.value); autoResize(e); }}
+          onKeyDown={onKeyDown}
+          placeholder="message rook"
+          rows={1}
+        />
+        <div className="composer-foot">
+          <div className="mode-switch">
+            {['chat','coder','team'].map(m => (
+              <button key={m} className={mode === m ? 'is-active' : ''} onClick={() => setMode(m)}>{m}</button>
+            ))}
+          </div>
+          <div className="composer-spacer"/>
+          {streaming
+            ? <button className="btn btn-danger" style={{height:32}} onClick={stopChat}>stop</button>
+            : <button className="composer-send" onClick={send} title="send · Enter" disabled={!input.trim()}>
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                  <path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
                 </svg>
               </button>
-              <button id="btn-memory-toggle" class="header-icon-btn" aria-label="Toggle memory panel" title="Show memory panel (Ctrl+M)">
-                <svg viewBox="0 0 20 20" fill="none" width="14" height="14">
-                  <path d="M4 4h12v12H4z" stroke="currentColor" stroke-width="1.5"/>
-                  <path d="M4 8h12M4 12h12M8 4v12M12 4v12" stroke="currentColor" stroke-width="1.2" opacity=".55"/>
-                </svg>
-              </button>
-            </div>
-          </div>
-          <!-- Context window usage bar — thin strip between header and messages -->
-          <div id="ctx-bar-wrap"><div id="ctx-bar-fill"></div></div>
-          <div id="messages">
-            <!-- Empty state: tagline + quick-action board + ambient context -->
-            <div id="empty-state" class="visible">
-              <div class="empty-marker">
-                <span class="empty-marker-rule"></span>
-                <span>NEW SESSION</span>
-              </div>
-              <div class="empty-tagline">How can I help?</div>
-              <div class="empty-sub">
-                Ask anything, explore your documents, or jump in with one of these.
-                <span class="empty-kbd-hints">
-                  Press <kbd>Ctrl+N</kbd> for new chat · <kbd>Ctrl+K</kbd> for commands · <kbd>Ctrl+/</kbd> for memory
-                </span>
-              </div>
+          }
+        </div>
+      </div>
+    </div>
+  );
+}
 
-              <!-- quick-action board — six cards that cover the center void -->
-              <div class="quick-board">
-                <button class="qa-card" data-action="index-folder">
-                  <div class="qa-title">Index a folder</div>
-                  <div class="qa-desc">Make a directory searchable in memory.</div>
-                </button>
-                <button class="qa-card" data-action="import-memory">
-                  <div class="qa-title">Import memory</div>
-                  <div class="qa-desc">Bring in notes, facts, or a prior export.</div>
-                </button>
-                <button class="qa-card" data-action="browse-skills">
-                  <div class="qa-title">Browse skills</div>
-                  <div class="qa-desc">Install plugins and MCP servers from GitHub.</div>
-                </button>
-                <button class="qa-card" data-action="open-terminal">
-                  <div class="qa-title">Open terminal</div>
-                  <div class="qa-desc">Run commands with Rook watching.</div>
-                </button>
-                <button class="qa-card" data-action="schedule-task">
-                  <div class="qa-title">Schedule a task</div>
-                  <div class="qa-desc">Wake Rook up on a cadence.</div>
-                </button>
-                <button class="qa-card" data-action="go-memory">
-                  <div class="qa-title">Recent context</div>
-                  <div class="qa-desc">What Rook currently knows about you.</div>
-                </button>
-              </div>
-            </div>
+function Msg({ m, onHoverChip, onClickChip }) {
+  const isUser = m.role === 'user';
+  return (
+    <div className={`msg msg-${m.role}`}>
+      <div className={`msg-tag ${isUser ? 'msg-tag-user' : 'msg-tag-assistant'}`}>
+        {isUser ? 'you' : 'rook'}
+      </div>
+      <div className={`msg-text${m._streaming ? ' msg-cursor' : ''}`}>
+        {m.text}
+      </div>
+    </div>
+  );
+}
+
+// ── MapHUD ────────────────────────────────────────────────
+
+function MapHUD({ hoveredId, selectedId, onNodeHover, onNodeClick }) {
+  const [collapsed, setCollapsed] = React.useState(false);
+  const { graph, curatedIds } = useBackend();
+  const highlight = curatedIds.length > 0 ? curatedIds : (hoveredId ? [hoveredId] : []);
+  const n = selectedId ? graph.nodes.find(x => x.id === selectedId) : null;
+
+  if (collapsed) {
+    return (
+      <button className="hud-pill" onClick={() => setCollapsed(false)} title="expand memory map">
+        <span className="heartbeat"/>
+        memory · {graph.nodes.length} nodes
+      </button>
+    );
+  }
+
+  function neighbors(id) {
+    return (graph.edges || []).reduce((acc, e) => {
+      if (e.a === id) { const nb = graph.nodes.find(x => x.id === e.b); if (nb) acc.push(nb); }
+      if (e.b === id) { const nb = graph.nodes.find(x => x.id === e.a); if (nb) acc.push(nb); }
+      return acc;
+    }, []);
+  }
+  function inE(id)  { return (graph.edges || []).filter(e => e.b === id).length; }
+  function outE(id) { return (graph.edges || []).filter(e => e.a === id).length; }
+
+  return (
+    <div className="hud">
+      <div className="hud-head">
+        <span className="heartbeat"/>
+        <strong>memory</strong>
+        <span className="sp"/>
+        <span style={{color:'var(--ink-4)',fontSize:10}}>{graph.nodes.length}·{(graph.edges||[]).length}</span>
+        <button onClick={() => setCollapsed(true)} title="collapse">
+          <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+            <path d="M2 2l6 6M8 2l-6 6" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+          </svg>
+        </button>
+      </div>
+
+      <div className="hud-stage">
+        <Graph
+          width={300} height={220}
+          highlightIds={highlight}
+          recentIds={curatedIds}
+          selectedId={selectedId}
+          onNodeHover={onNodeHover}
+          onNodeClick={onNodeClick}
+          variant="ambient"
+          showLabels={false}
+        />
+      </div>
+
+      {n ? (
+        <div className="hud-insp">
+          <div className="insp-type">{n.t}</div>
+          <div className="insp-title">{n.label}</div>
+          <div className="insp-meta">
+            <span>{inE(n.id)} in</span>
+            <span className="dotm"/>
+            <span>{outE(n.id)} out</span>
           </div>
-          <!-- Tool approval strip -->
-          <div id="approval-strip" class="hidden">
-            <svg viewBox="0 0 16 16" fill="none" width="15" height="15"><circle cx="8" cy="8" r="6.5" stroke="#fbbf24" stroke-width="1.3"/><path d="M8 5v3.5l2 1.2" stroke="#fbbf24" stroke-width="1.3" stroke-linecap="round"/></svg>
-            <span id="approval-text"></span>
-            <button id="btn-approve" class="strip-btn ok">Approve</button>
-            <button id="btn-reject"  class="strip-btn bad">Reject</button>
-          </div>
-          <div id="input-area">
-            <div id="input-center">
-              <!-- ── Attached image previews ── -->
-              <div id="img-attach-strip" class="hidden"></div>
-              <!-- ── Input box ── -->
-              <div id="input-box">
-                <span id="approval-badge" class="hidden" aria-hidden="true"></span>
-                <button id="btn-attach" title="Attach file or image (or drag &amp; drop)" aria-label="Attach file">
-                  <svg viewBox="0 0 16 16" fill="none" width="14" height="14"><path d="M13 7.5l-5.5 5.5a3.5 3.5 0 01-4.95-4.95l5.5-5.5a2 2 0 012.83 2.83L5.38 11.3a.5.5 0 01-.7-.7L10 5.33" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                </button>
-                <input id="file-input" type="file" multiple accept="*/*" style="display:none"/>
-                <textarea id="chat-input" placeholder="Message Rook…" rows="1"></textarea>
-                <button id="btn-send" aria-label="Send message">
-                  <svg viewBox="0 0 16 16" fill="none"><path d="M13.5 8L2.5 2.5l2 5.5-2 5.5L13.5 8z" fill="currentColor"/></svg>
-                </button>
-                <button id="btn-stop" class="hidden" aria-label="Stop generating" title="Stop generating" style="position:relative">
-                  <svg viewBox="0 0 16 16" fill="none"><rect x="4" y="4" width="8" height="8" rx="1.5" fill="currentColor"/></svg>
-                </button>
-              </div>
-              <!-- ── Toolbar row ── -->
-              <div id="input-toolbar">
-                <div id="toolbar-left">
-                  <!-- Mode dropdown trigger -->
-                  <div id="mode-dropdown-wrap">
-                    <button id="btn-mode-toggle" title="Switch agent mode" aria-haspopup="listbox" aria-expanded="false" aria-label="Switch agent mode: Chat">
-                      <svg id="mode-icon-chat" class="mode-icon active" viewBox="0 0 20 20" fill="none" width="14" height="14">
-                        <path d="M3 4.5A2 2 0 015 2.5h10a2 2 0 012 2v6.5a2 2 0 01-2 2H7.2L3 16V4.5z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
-                        <circle cx="7.2" cy="8" r="1" fill="currentColor"/><circle cx="10" cy="8" r="1" fill="currentColor"/><circle cx="12.8" cy="8" r="1" fill="currentColor"/>
-                      </svg>
-                      <svg id="mode-icon-coder" class="mode-icon" viewBox="0 0 20 20" fill="none" width="14" height="14">
-                        <rect x="2" y="3" width="16" height="14" rx="2" stroke="currentColor" stroke-width="1.5"/>
-                        <path d="M2 7h16" stroke="currentColor" stroke-width="1.2" opacity=".5"/>
-                        <path d="M6.5 13l-2.5-2 2.5-2M13.5 13l2.5-2-2.5-2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-                        <path d="M9 14l2-6" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
-                      </svg>
-                      <svg id="mode-icon-team" class="mode-icon" viewBox="0 0 20 20" fill="none" width="14" height="14">
-                        <rect x="7.5" y="1.5" width="5" height="5" rx="1.5" stroke="currentColor" stroke-width="1.4"/>
-                        <rect x="1.5" y="13.5" width="5" height="5" rx="1.5" stroke="currentColor" stroke-width="1.4"/>
-                        <rect x="13.5" y="13.5" width="5" height="5" rx="1.5" stroke="currentColor" stroke-width="1.4"/>
-                        <path d="M10 6.5v3.5M10 10L4.5 13.5M10 10l5.5 3.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
-                      </svg>
-                      <span id="active-mode-label">Chat</span>
-                      <svg viewBox="0 0 10 6" fill="none" width="8" height="8" class="caret"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                    </button>
-                    <!-- Dropdown menu (hidden by default) -->
-                    <div id="mode-menu" class="hidden">
-                      <button class="mode-item active" data-mode="Chat">
-                        <svg viewBox="0 0 20 20" fill="none" width="16" height="16">
-                          <path d="M3 4.5A2 2 0 015 2.5h10a2 2 0 012 2v6.5a2 2 0 01-2 2H7.2L3 16V4.5z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
-                          <circle cx="7.2" cy="8" r="1" fill="currentColor"/><circle cx="10" cy="8" r="1" fill="currentColor"/><circle cx="12.8" cy="8" r="1" fill="currentColor"/>
-                        </svg>
-                        <div class="mode-item-text"><span class="mi-name">Chat</span><span class="mi-desc">Conversational AI</span></div>
-                      </button>
-                      <button class="mode-item" data-mode="Coder">
-                        <svg viewBox="0 0 20 20" fill="none" width="16" height="16">
-                          <rect x="2" y="3" width="16" height="14" rx="2" stroke="currentColor" stroke-width="1.5"/>
-                          <path d="M2 7h16" stroke="currentColor" stroke-width="1.2" opacity=".5"/>
-                          <path d="M6.5 13l-2.5-2 2.5-2M13.5 13l2.5-2-2.5-2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-                          <path d="M9 14l2-6" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
-                        </svg>
-                        <div class="mode-item-text"><span class="mi-name">Coder</span><span class="mi-desc">Code &amp; tools</span></div>
-                      </button>
-                      <button class="mode-item" data-mode="Team">
-                        <svg viewBox="0 0 20 20" fill="none" width="16" height="16">
-                          <rect x="7.5" y="1.5" width="5" height="5" rx="1.5" stroke="currentColor" stroke-width="1.4"/>
-                          <rect x="1.5" y="13.5" width="5" height="5" rx="1.5" stroke="currentColor" stroke-width="1.4"/>
-                          <rect x="13.5" y="13.5" width="5" height="5" rx="1.5" stroke="currentColor" stroke-width="1.4"/>
-                          <path d="M10 6.5v3.5M10 10L4.5 13.5M10 10l5.5 3.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
-                        </svg>
-                        <div class="mode-item-text"><span class="mi-name">Team</span><span class="mi-desc">Task planner</span></div>
-                      </button>
-                    </div>
-                  </div>
-                </div>
-                <div id="toolbar-right">
-                  <div id="input-hint">Enter · send &nbsp; Shift+Enter · newline</div>
-                </div>
-              </div>
-            </div>
+          <div className="insp-rel-items">
+            {neighbors(n.id).slice(0, 4).map((x, i) => (
+              <NodeChip key={i} id={x.id} onClick={onNodeClick}/>
+            ))}
           </div>
         </div>
-        <!-- ── Memory side panel: renders curated context for the active chat ── -->
-        <aside id="memory-panel" class="hidden" aria-label="Curated memory panel">
-          <div id="memory-panel-header">
-            <span id="memory-panel-title">Memory</span>
-            <span id="memory-panel-count"></span>
-            <!-- GNN status chip — hidden until memory_capabilities arrives -->
-            <span id="gnn-chip" class="hidden" title="GraphSAGE training pipeline status"></span>
-            <button id="btn-memory-close" class="header-icon-btn" aria-label="Close memory panel" title="Close (Ctrl+M)">
-              <svg viewBox="0 0 16 16" fill="none" width="12" height="12">
-                <path d="M3 3l10 10M13 3L3 13" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+      ) : (
+        <div className="hud-foot">
+          <span className="h-item"><span className="h-dot" style={{background:'var(--node-person)'}}/>person</span>
+          <span className="h-item"><span className="h-dot" style={{background:'var(--node-thing)'}}/>thing</span>
+          <span className="h-item"><span className="h-dot" style={{background:'var(--node-project)'}}/>project</span>
+          <span className="sp"/>
+          <span className="h-meta">live</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Rail ─────────────────────────────────────────────────
+
+function Rail({ onSelectNode }) {
+  const [tab, setTab] = React.useState(null);
+  const { sessions, convId, curatedIds, loadConversation, newConversation } = useBackend();
+
+  const activeSession = sessions.find(s => s.id === convId) || null;
+
+  return (
+    <div className="rail-wrap">
+      <div className="rail-spine">
+        <button
+          className={tab === 'journal' ? 'is-active' : ''}
+          onClick={() => setTab(tab === 'journal' ? null : 'journal')}
+        >
+          journal
+          <span className="sp-count">{sessions.length}</span>
+        </button>
+        <button
+          className={tab === 'trail' ? 'is-active' : ''}
+          onClick={() => setTab(tab === 'trail' ? null : 'trail')}
+        >
+          trail
+          <span className="sp-count">{curatedIds.length}</span>
+        </button>
+      </div>
+
+      {tab && (
+        <div className="rail-panel">
+          <header className="rail-head">
+            <div>
+              <div className="rail-kicker">{tab}</div>
+              <div className="rail-title">{tab === 'journal' ? 'All sessions' : 'This chat'}</div>
+            </div>
+            <span className="sp"/>
+            {tab === 'journal' && (
+              <button className="btn btn-solid" style={{marginRight:8,height:26,fontSize:11}} onClick={newConversation}>+ new</button>
+            )}
+            <button className="rail-close" onClick={() => setTab(null)} title="collapse">
+              <svg width="11" height="11" viewBox="0 0 10 10" fill="none">
+                <path d="M3 1l4 4-4 4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
               </svg>
             </button>
-          </div>
-          <div id="memory-panel-body">
-            <!-- Live agent task list — populated when Team mode calls todo_write -->
-            <div id="todo-widget" class="hidden">
-              <div id="todo-widget-header">
-                <span class="todo-widget-title">Agent tasks</span>
-                <span id="todo-widget-count"></span>
+          </header>
+
+          {tab === 'journal' && (
+            <JournalPanel
+              activeConvId={convId}
+              onLoad={(id, title) => { loadConversation(id, title); setTab(null); }}
+            />
+          )}
+          {tab === 'trail' && (
+            <TrailPanel onSelectNode={onSelectNode}/>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function JournalPanel({ activeConvId, onLoad }) {
+  const { sessions } = useBackend();
+  const [expanded, setExpanded] = React.useState(null);
+
+  if (sessions.length === 0) {
+    return <div className="trail-panel trail-empty" style={{padding:'24px 18px'}}>No sessions yet.</div>;
+  }
+
+  return (
+    <div className="jrnl-panel">
+      {sessions.map(s => {
+        const isNow  = s.id === activeConvId;
+        const isOpen = expanded === s.id;
+        return (
+          <div key={s.id}
+               className={`jrnl-row${isNow ? ' is-now' : ''}${isOpen ? ' is-active' : ''}`}
+               onClick={() => setExpanded(isOpen ? null : s.id)}>
+            <div>
+              <div className="jrnl-title">{s.title}</div>
+              <div className="jrnl-meta">
+                {s.mins > 0 && <><span>{s.mins} msg{s.mins === 1 ? '' : 's'}</span><span>·</span></>}
+                {isNow && <span className="sig"><span className="heartbeat" style={{marginRight:4}}/>live</span>}
               </div>
-              <ul id="todo-widget-list"></ul>
+              {isOpen && (
+                <div className="jrnl-actions">
+                  <button onClick={e => { e.stopPropagation(); onLoad(s.id, s.title); }}>open</button>
+                </div>
+              )}
             </div>
-            <div id="memory-panel-empty" class="memory-empty">
-              Memory that the curator injects into a chat will appear here with scores. Send a message to see it in action.
-            </div>
-            <ul id="memory-panel-list"></ul>
+            <div className="jrnl-when">{s.when}</div>
           </div>
-        </aside>
+        );
+      })}
+    </div>
+  );
+}
+
+function TrailPanel({ onSelectNode }) {
+  const { curatedIds, graph } = useBackend();
+
+  if (curatedIds.length === 0) {
+    return (
+      <div className="trail-panel">
+        <p className="trail-empty">No nodes retrieved yet. Send a message to see memory traversal.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="trail-panel">
+      <div className="trail-intro">
+        Last response retrieved <em>{curatedIds.length} node{curatedIds.length === 1 ? '' : 's'}</em> from memory.
+      </div>
+      <div className="trail-steps">
+        {curatedIds.map((id, i) => {
+          const n = graph.nodes.find(x => x.id === id);
+          return (
+            <div key={i} className="trail-step" onClick={() => onSelectNode && onSelectNode(id)}>
+              <span className="trail-step-no">{String(i+1).padStart(2,'0')}</span>
+              <NodeChip id={id} onClick={onSelectNode}/>
+              <span className="trail-step-meta">{n?.t || ''}</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ── Skills ────────────────────────────────────────────────
+
+function Skills() {
+  const { plugins } = useBackend();
+  const [tab, setTab] = React.useState('all');
+  const [q, setQ]     = React.useState('');
+
+  const shown = plugins.filter(p => {
+    if (tab === 'installed' && !p.installed) return false;
+    if (tab === 'mcp'   && p.kind !== 'MCP')   return false;
+    if (tab === 'skill' && p.kind !== 'Skill')  return false;
+    if (q && !(p.name + p.desc).toLowerCase().includes(q.toLowerCase())) return false;
+    return true;
+  });
+
+  return (
+    <div className="page-skills">
+      <div className="sk-head">
+        <div className="atlas-kicker">skills & plugins</div>
+        <h1 className="atlas-title">Tools within reach</h1>
+        <p className="atlas-sub">MCP servers and skills Rook can reach for. Everything runs locally, under your approval.</p>
       </div>
 
-      <!-- MEMORY PAGE -->
-      <div class="page" id="page-memory">
-        <div class="page-header">
-          <h2 data-section="§ 01">Memory Graph</h2>
-          <div class="page-search">
-            <input id="mem-query" type="text" placeholder="Search nodes…"/>
-            <button id="btn-mem-search" class="icon-btn">
-              <svg viewBox="0 0 16 16" fill="none"><circle cx="7" cy="7" r="4.5" stroke="currentColor" stroke-width="1.3"/><path d="M10.5 10.5l3 3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
-            </button>
-            <button id="btn-mem-refresh" class="icon-btn" title="Reload">
-              <svg viewBox="0 0 16 16" fill="none"><path d="M13.5 8A5.5 5.5 0 1 1 8 2.5a5.5 5.5 0 0 1 3.89 1.61L13.5 2.5v4h-4l1.46-1.46A3.5 3.5 0 1 0 11.5 8" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            </button>
-          </div>
+      <div className="sk-controls">
+        <div className="sk-tabs">
+          {[['all','All'],['mcp','MCP'],['skill','Skills'],['installed','Installed']].map(([k,l]) => (
+            <button key={k} className={tab === k ? 'is-active' : ''} onClick={() => setTab(k)}>{l}</button>
+          ))}
         </div>
-        <div class="page-body">
-          <!-- Stats strip -->
-          <div id="mem-stats">
-            <div class="mem-stat"><span class="mem-stat-num" id="mem-stat-total">0</span><span class="mem-stat-lbl">nodes</span></div>
-            <div class="mem-stat"><span class="mem-stat-num" id="mem-stat-shown">0</span><span class="mem-stat-lbl">shown</span></div>
-            <div class="mem-stat"><span class="mem-stat-num" id="mem-stat-types">0</span><span class="mem-stat-lbl">types</span></div>
-          </div>
-          <!-- Type filter chips -->
-          <div id="mem-type-filter"></div>
-          <!-- Grouped node list -->
-          <div id="mem-graph-view"></div>
+        <div className="sk-search">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+            <circle cx="7" cy="7" r="4.5" stroke="currentColor" strokeWidth="1.4"/>
+            <path d="M10.3 10.3L14 14" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+          </svg>
+          <input placeholder="filter" value={q} onChange={e => setQ(e.target.value)}/>
+          <span className="sk-search-meta">{shown.length} / {plugins.length}</span>
         </div>
       </div>
 
-      <!-- SKILLS PAGE -->
-      <div class="page" id="page-skills">
-        <div class="page-header">
-          <h2 data-section="§ 02">Skills</h2>
-          <button id="btn-reload-skills" class="icon-btn" title="Refresh">
-            <svg viewBox="0 0 16 16" fill="none"><path d="M13 8A5 5 0 113.5 5M3 2v3h3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      {shown.length === 0 ? (
+        <div className="sk-empty">
+          {plugins.length === 0
+            ? 'No skills or plugins installed yet. Install MCP servers or drop skills into .docu/skills/.'
+            : 'Nothing matches.'}
+        </div>
+      ) : (
+        <div className="sk-grid">
+          {shown.map(p => (
+            <article key={p.name} className="sk-card">
+              <div className="sk-card-top">
+                <span className={`sk-kind sk-kind-${p.kind.toLowerCase()}`}>{p.kind}</span>
+                <span className="sk-cat">{p.cat}</span>
+              </div>
+              <div className="sk-name">{p.name}</div>
+              <div className="sk-desc">{p.desc}</div>
+              <div className="sk-meta">
+                {p.stars > 0 && <span>★ {p.stars.toLocaleString()}</span>}
+                <span>{p.installed ? <span className="signal">installed</span> : 'available'}</span>
+              </div>
+              <div className="sk-actions">
+                {p.installed
+                  ? <button className="btn">configure</button>
+                  : <button className="btn btn-solid">install</button>}
+              </div>
+            </article>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Settings ──────────────────────────────────────────────
+
+function Settings() {
+  const { saveSettings } = useBackend();
+  const [section, setSection] = React.useState('llm');
+  const [apiBase, setApiBase] = React.useState('');
+  const [apiKey,  setApiKey]  = React.useState('');
+  const [model,   setModel]   = React.useState('');
+  const [reveal,  setReveal]  = React.useState(false);
+  const [saved,   setSaved]   = React.useState(false);
+  const [temp,    setTemp]    = React.useState(0.7);
+  const [sys,     setSys]     = React.useState('you are rook. local-first. cite memory as node ids. no em dashes. no AI attribution. be dry.');
+
+  React.useEffect(() => {
+    if (!window.rook) return;
+    window.rook.getPlatformUrl().then(v => v && setApiBase(v)).catch(() => {});
+    window.rook.getPlatformApiKey().then(v => v && setApiKey(v)).catch(() => {});
+  }, []);
+
+  const doSave = () => {
+    saveSettings({ apiUrl: apiBase, apiKey, model });
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  };
+
+  const sections = [
+    { k: 'llm',        n: '01', label: 'Model'     },
+    { k: 'memory',     n: '02', label: 'Memory'    },
+    { k: 'approvals',  n: '03', label: 'Approvals' },
+    { k: 'appearance', n: '04', label: 'Appearance'},
+    { k: 'system',     n: '05', label: 'System'    },
+  ];
+
+  return (
+    <div className="page-settings">
+      <nav className="set-nav">
+        {sections.map(s => (
+          <button key={s.k} className={`set-nav-row${section === s.k ? ' is-active' : ''}`} onClick={() => setSection(s.k)}>
+            <span className="set-nav-no">{s.n}</span>
+            <span className="set-nav-label">{s.label}</span>
           </button>
-        </div>
-        <div class="page-body">
-          <ul id="skills-list" class="item-list"></ul>
+        ))}
+      </nav>
+
+      <div className="set-body">
+        {section === 'llm' && (
+          <>
+            <div className="set-head">
+              <div className="set-head-kick">settings</div>
+              <h1 className="set-head-title">Model</h1>
+              <p className="set-head-sub">Any OpenAI-compatible endpoint or local Ollama. Keys stored in <code>%APPDATA%/Rook/.env</code> and never leave the machine.</p>
+            </div>
+            <SetRow label="API base" hint="OpenAI-compatible">
+              <input className="set-input" value={apiBase} onChange={e => setApiBase(e.target.value)} placeholder="https://api.openai.com/v1"/>
+            </SetRow>
+            <SetRow label="API key" hint="stored locally">
+              <div className="set-secret">
+                <input className="set-input" type={reveal ? 'text' : 'password'} value={apiKey} onChange={e => setApiKey(e.target.value)} placeholder="sk-…"/>
+                <button onClick={() => setReveal(!reveal)}>{reveal ? 'hide' : 'show'}</button>
+              </div>
+            </SetRow>
+            <SetRow label="Model" hint="name or tag">
+              <input className="set-input" value={model} onChange={e => setModel(e.target.value)} placeholder="claude-haiku-4-5"/>
+            </SetRow>
+            <SetRow label="System prompt" hint="prepended to every turn" wide>
+              <textarea className="set-textarea" value={sys} onChange={e => setSys(e.target.value)} rows={4}/>
+            </SetRow>
+            <SetRow label="Temperature" hint={temp.toFixed(2)}>
+              <input type="range" min="0" max="2" step=".05" value={temp} onChange={e => setTemp(+e.target.value)} className="set-range"/>
+            </SetRow>
+            <div className="set-footer">
+              {saved
+                ? <span className="set-saved">saved</span>
+                : <span className="set-footer-note">changes apply on save</span>}
+              <button className="btn btn-solid" onClick={doSave}>save</button>
+            </div>
+          </>
+        )}
+
+        {section === 'memory' && (
+          <>
+            <div className="set-head">
+              <div className="set-head-kick">settings</div>
+              <h1 className="set-head-title">Memory</h1>
+              <p className="set-head-sub">How Rook decides what to remember. The curator loop promotes facts it sees twice.</p>
+            </div>
+            <SetRow label="Promotion threshold" hint="seen in N sessions"><input type="range" min="1" max="10" defaultValue="2" className="set-range"/></SetRow>
+            <SetRow label="GNN epoch budget" hint="per idle minute"><input type="number" defaultValue="50" className="set-input" style={{width:120}}/></SetRow>
+            <SetRow label="Forget policy" hint="untouched for N days → demote"><input type="number" defaultValue="90" className="set-input" style={{width:120}}/></SetRow>
+            <SetRow label="Indexed folders" hint="rooted, read-only" wide>
+              <div className="set-folder-list">
+                <div className="set-folder-add" onClick={() => window.rook?.pickFolder().then(f => f && window.rook.send({ type: 'index_directory', id: uid(), path: f }))}>+ add folder</div>
+              </div>
+            </SetRow>
+            <div className="set-footer">
+              <span className="set-footer-note">local only · nothing sent</span>
+            </div>
+          </>
+        )}
+
+        {section === 'approvals' && (
+          <>
+            <div className="set-head">
+              <div className="set-head-kick">settings</div>
+              <h1 className="set-head-title">Approvals</h1>
+              <p className="set-head-sub">Rook never takes a destructive action without a visible prompt. Tune when.</p>
+            </div>
+            {[['shell commands','every'],['file writes','outside workspace'],['git push','every'],['network reach','first time'],['memory delete','every']].map(([k,v]) => (
+              <SetRow key={k} label={k} hint="current policy">
+                <select defaultValue={v} className="set-input" style={{width:240}}>
+                  <option>never</option>
+                  <option>first time</option>
+                  <option>outside workspace</option>
+                  <option>every</option>
+                </select>
+              </SetRow>
+            ))}
+          </>
+        )}
+
+        {section === 'appearance' && (
+          <>
+            <div className="set-head">
+              <div className="set-head-kick">settings</div>
+              <h1 className="set-head-title">Appearance</h1>
+              <p className="set-head-sub">Paper or ink. Density. Labels on the atlas.</p>
+            </div>
+            <SetRow label="Palette" hint="paper is default">
+              <div className="set-seg">
+                <button className="is-active" onClick={() => document.documentElement.setAttribute('data-theme','paper')}>paper</button>
+                <button onClick={() => document.documentElement.setAttribute('data-theme','ink')}>ink</button>
+              </div>
+            </SetRow>
+          </>
+        )}
+
+        {section === 'system' && (
+          <>
+            <div className="set-head">
+              <div className="set-head-kick">settings</div>
+              <h1 className="set-head-title">System</h1>
+              <p className="set-head-sub">Rust backend paths and named pipe. Probably don't need this.</p>
+            </div>
+            <SetRow label="rook.exe" hint="override auto-detection"><input className="set-input" defaultValue="C:\\Users\\aaron\\AppData\\Local\\Programs\\Rook\\rook.exe"/></SetRow>
+            <SetRow label="pipe name" hint="windows named pipe"><input className="set-input" defaultValue="\\\\.\\pipe\\rook"/></SetRow>
+            <SetRow label="log level" hint="affects rook.log verbosity">
+              <select className="set-input" defaultValue="info">
+                <option>error</option><option>warn</option><option>info</option><option>debug</option><option>trace</option>
+              </select>
+            </SetRow>
+            <SetRow label="launch at login" hint="windows startup">
+              <input type="checkbox" onChange={e => window.rook?.toggleLoginItem(e.target.checked)}/>
+            </SetRow>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function SetRow({ label, hint, children, wide }) {
+  return (
+    <div className={`set-row${wide ? ' is-wide' : ''}`}>
+      <div>
+        <div className="set-row-label">{label}</div>
+        {hint && <div className="set-row-hint">{hint}</div>}
+      </div>
+      <div>{children}</div>
+    </div>
+  );
+}
+
+// ── Tweaks panel ──────────────────────────────────────────
+
+const TWEAK_DEFAULTS = { theme: 'paper', density: 'balanced', accent: '#E6188A' };
+
+function useTweaks() {
+  const [t, setT] = React.useState(() => {
+    try {
+      const raw = localStorage.getItem('rook:tweaks');
+      if (raw) return { ...TWEAK_DEFAULTS, ...JSON.parse(raw) };
+    } catch (_) {}
+    return TWEAK_DEFAULTS;
+  });
+  React.useEffect(() => {
+    document.documentElement.setAttribute('data-theme', t.theme);
+    document.documentElement.style.setProperty('--signal', t.accent);
+    try { localStorage.setItem('rook:tweaks', JSON.stringify(t)); } catch (_) {}
+  }, [t]);
+  return [t, setT];
+}
+
+function TweaksPanel({ open, onClose, tweaks, setTweaks }) {
+  if (!open) return null;
+  const set = (k, v) => setTweaks(prev => ({ ...prev, [k]: v }));
+  const swatches = ['#E6188A','#FF5A1F','#7C2AA3','#0FB5A6','#F5B000'];
+  return (
+    <div className="tweaks-panel">
+      <div className="tweaks-head">
+        <span className="tweaks-title">Tweaks</span>
+        <button className="tweaks-close" onClick={onClose}>×</button>
+      </div>
+      <div className="tw-row">
+        <div><div className="tw-label">Palette</div><div className="tw-hint">paper or ink</div></div>
+        <div className="set-seg">
+          <button className={tweaks.theme === 'paper' ? 'is-active' : ''} onClick={() => set('theme','paper')}>paper</button>
+          <button className={tweaks.theme === 'ink'   ? 'is-active' : ''} onClick={() => set('theme','ink')}>ink</button>
         </div>
       </div>
-
-      <!-- PLUGINS PAGE -->
-      <div class="page" id="page-plugins">
-        <div class="page-header">
-          <h2 data-section="§ 03">Plugins</h2>
-          <div class="page-search">
-            <input id="plugin-query" type="text" placeholder="Search GitHub for MCPs &amp; Skills…"/>
-            <button id="btn-plugin-search" class="icon-btn">
-              <svg viewBox="0 0 16 16" fill="none"><circle cx="7" cy="7" r="4.5" stroke="currentColor" stroke-width="1.3"/><path d="M10.5 10.5l3 3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
-            </button>
-          </div>
-        </div>
-        <div class="plugin-tabs">
-          <button class="ptab active" data-ptab="browse">Browse</button>
-          <button class="ptab" data-ptab="installed">Installed</button>
-          <button class="ptab" data-ptab="search">Search results</button>
-        </div>
-        <div class="page-body">
-
-          <!-- BROWSE panel -->
-          <div id="plugins-browse" class="plugin-panel active">
-            <div class="browse-controls">
-              <div class="filter-pills">
-                <button class="fpill active" data-type="all">All</button>
-                <button class="fpill" data-type="mcp">MCP Servers</button>
-                <button class="fpill" data-type="skill">AI Skills</button>
-              </div>
-              <div class="sort-controls">
-                <label>Category</label>
-                <select id="browse-category">
-                  <option value="all">All categories</option>
-                  <option value="Browser/Web">Browser &amp; Web</option>
-                  <option value="Database">Database</option>
-                  <option value="Search">Search</option>
-                  <option value="Files/Storage">Files &amp; Storage</option>
-                  <option value="Code/Git">Code &amp; Git</option>
-                  <option value="Cloud/Infra">Cloud &amp; Infra</option>
-                  <option value="AI/Vectors">AI &amp; Vectors</option>
-                  <option value="Communication">Communication</option>
-                  <option value="Productivity">Productivity</option>
-                  <option value="Finance/Crypto">Finance &amp; Crypto</option>
-                </select>
-                <label>Sort</label>
-                <select id="browse-sort">
-                  <option value="stars">Stars</option>
-                  <option value="updated">Recently updated</option>
-                  <option value="forks">Forks</option>
-                </select>
-              </div>
-            </div>
-            <ul id="browse-list" class="item-list"></ul>
-            <div id="browse-footer">
-              <button id="btn-load-more" class="load-more-btn" style="display:none">Load more</button>
-              <span id="browse-status" class="browse-status" role="status" aria-live="polite"></span>
-            </div>
-          </div>
-
-          <!-- INSTALLED panel -->
-          <div id="plugins-installed" class="plugin-panel">
-            <ul id="installed-list" class="item-list"></ul>
-          </div>
-
-          <!-- SEARCH panel -->
-          <div id="plugins-search" class="plugin-panel">
-            <ul id="search-list" class="item-list"></ul>
-          </div>
-
+      <div className="tw-row">
+        <div><div className="tw-label">Accent</div></div>
+        <div className="tw-sw">
+          {swatches.map(c => (
+            <button key={c} className={tweaks.accent === c ? 'is-active' : ''} style={{background:c}} onClick={() => set('accent',c)}/>
+          ))}
         </div>
       </div>
+    </div>
+  );
+}
 
-      <!-- SETTINGS PAGE -->
-      <div class="page" id="page-settings">
-        <div class="settings-shell">
+// ── App shell ─────────────────────────────────────────────
 
-          <!-- Left nav -->
-          <nav class="snav">
-            <div class="snav-header">
-              <div class="snav-logo">
-                <svg viewBox="0 0 20 20" fill="none" width="16" height="16"><circle cx="10" cy="10" r="2.5" stroke="currentColor" stroke-width="1.4"/><path d="M10 2v2m0 12v2M2 10h2m12 0h2m-3.17-5.66-1.42 1.42M6.59 13.41l-1.42 1.42m0-9.25 1.42 1.42m6.82 6.82 1.42 1.42" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
-              </div>
-              <div>
-                <div class="snav-product">Rook</div>
-                <div class="snav-label">Settings</div>
-              </div>
+function App() {
+  const [page, setPage] = React.useState(() => localStorage.getItem('rook:page') || 'chat');
+  const [tweaks, setTweaks]     = useTweaks();
+  const [tweaksOpen, setTweaksOpen] = React.useState(false);
+  const [hoveredNode, setHoveredNode] = React.useState(null);
+  const [selectedNode, setSelectedNode] = React.useState(null);
+  const { pipeOk, version, graph, sessions, newConversation } = useBackend();
+
+  React.useEffect(() => { localStorage.setItem('rook:page', page); }, [page]);
+
+  // edit-mode postMessage handshake is for the design preview sandbox only.
+  // in electron, ignore it — tweaks open on click.
+
+  const nav = [
+    { k: 'chat',     label: 'Chat'     },
+    { k: 'skills',   label: 'Skills'   },
+    { k: 'settings', label: 'Settings' },
+  ];
+
+  return (
+    <div className="app">
+      <div className="main-pane">
+        <header className="topbar">
+          <div className="topbar-left">
+            <div className="brand">
+              <span className="brand-word">Rook</span>
+              {version && <span className="brand-ver">v{version}</span>}
             </div>
+            <div className="topbar-context">
+              <span><strong>{graph.nodes.length}</strong> nodes</span>
+              {sessions.length > 0 && <><span className="topbar-dot"/><span>{sessions.length} sessions</span></>}
+            </div>
+          </div>
 
-            <div class="snav-group-label">Configuration</div>
-
-            <button class="snav-item active" data-target="scontent-llm">
-              <svg viewBox="0 0 16 16" fill="none" width="15" height="15"><rect x="1" y="3" width="14" height="10" rx="2" stroke="currentColor" stroke-width="1.3"/><path d="M5 7l2 2-2 2M9 11h2" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
-              <span>Language Model</span>
-              <span class="snav-item-tag">LLM</span>
-            </button>
-            <button class="snav-item" data-target="scontent-appearance">
-              <svg viewBox="0 0 16 16" fill="none" width="15" height="15"><circle cx="8" cy="8" r="5.5" stroke="currentColor" stroke-width="1.3"/><path d="M8 5v3l2 1" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
-              <span>Appearance</span>
-              <span class="snav-item-tag">UI</span>
-            </button>
-
-            <div class="snav-group-label">Integrations</div>
-
-            <button class="snav-item" data-target="scontent-plugins">
-              <svg viewBox="0 0 16 16" fill="none" width="15" height="15"><path d="M6 1v4H2v10h12V5h-4V1H6Z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M6 9h4M8 7v4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
-              <span>Plugins</span>
-              <span class="snav-item-tag">GITHUB</span>
-            </button>
-
-            <div class="snav-group-label">Advanced</div>
-
-            <button class="snav-item" data-target="scontent-system">
-              <svg viewBox="0 0 16 16" fill="none" width="15" height="15"><rect x="1" y="3" width="14" height="10" rx="1.5" stroke="currentColor" stroke-width="1.3"/><circle cx="4.5" cy="8" r="1" fill="currentColor"/><path d="M7 8h5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
-              <span>System</span>
-              <span class="snav-item-tag">SYSTEM</span>
-            </button>
-
-            <div class="snav-spacer"></div>
-            <div class="snav-version"><span id="settings-version-label">v1.0.0 · debug</span></div>
+          <nav className="topbar-nav">
+            {nav.map(it => (
+              <button key={it.k} className={page === it.k ? 'is-active' : ''} onClick={() => setPage(it.k)}>
+                {it.label}
+              </button>
+            ))}
           </nav>
 
-          <!-- Right content area -->
-          <div class="scontent-area">
-
-            <!-- LLM -->
-            <div class="scontent active" id="scontent-llm">
-              <div class="scontent-header">
-                <h2 class="scontent-title">Language Model</h2>
-                <p class="scontent-desc">Connect Rook to any OpenAI-compatible API endpoint. Your key is stored locally and written to <code>.env</code> — never transmitted to Rook servers.</p>
-              </div>
-              <div class="scontent-body">
-
-                <div id="custom-api-fields">
-                <div class="sfield">
-                  <div class="sfield-meta">
-                    <label class="sfield-label" for="s-api-url">API Base URL</label>
-                    <span class="sfield-hint">Any OpenAI-compatible endpoint.</span>
-                  </div>
-                  <input type="text" id="s-api-url" class="sfield-input" placeholder="https://api.openai.com/v1" autocomplete="off"/>
-                </div>
-
-                <div class="sfield">
-                  <div class="sfield-meta">
-                    <label class="sfield-label" for="s-api-key">API Key</label>
-                    <span class="sfield-hint">Stored locally in <code>.env</code></span>
-                  </div>
-                  <div class="sfield-secret">
-                    <input type="password" id="s-api-key" class="sfield-input sfield-input--mono" placeholder="sk-…" autocomplete="off" spellcheck="false"/>
-                    <button class="sfield-eye" type="button" data-for="s-api-key" title="Reveal key">
-                      <svg viewBox="0 0 16 16" fill="none" width="14" height="14"><path d="M1 8s2.5-5 7-5 7 5 7 5-2.5 5-7 5-7-5-7-5Z" stroke="currentColor" stroke-width="1.3"/><circle cx="8" cy="8" r="2" stroke="currentColor" stroke-width="1.3"/></svg>
-                    </button>
-                  </div>
-                </div>
-                </div>
-
-                <div class="sfield">
-                  <div class="sfield-meta">
-                    <label class="sfield-label" for="s-model">Default Model</label>
-                    <span class="sfield-hint" id="s-model-hint">Select a model</span>
-                  </div>
-                  <div class="sfield-model-row">
-                    <select id="s-model" class="sfield-input sfield-select">
-                      <option value="">— select a model —</option>
-                    </select>
-                    <button id="btn-fetch-models" class="sfield-fetch-btn" type="button" title="Fetch models from API">↻ Fetch</button>
-                  </div>
-                </div>
-
-                <div class="sfield">
-                  <div class="sfield-meta">
-                    <label class="sfield-label" for="s-system-prompt">System Prompt</label>
-                    <span class="sfield-hint">Prepended to every conversation as a system message</span>
-                  </div>
-                  <textarea id="s-system-prompt" class="sfield-textarea" placeholder="You are a helpful assistant…" rows="3" spellcheck="false"></textarea>
-                </div>
-
-                <div class="sfield">
-                  <div class="sfield-meta">
-                    <label class="sfield-label" for="s-temperature">Temperature</label>
-                    <span class="sfield-hint">Controls randomness (0 = deterministic, 2 = creative)</span>
-                  </div>
-                  <div class="sslider-row">
-                    <input type="range" id="s-temperature" min="0" max="2" step="0.05" value="0.7"/>
-                    <input type="number" id="s-temperature-num" class="sslider-num" min="0" max="2" step="0.05" value="0.7" aria-label="Temperature value"/>
-                  </div>
-                </div>
-
-                <div class="sfield">
-                  <div class="sfield-meta">
-                    <label class="sfield-label" for="s-max-tokens">Max Tokens</label>
-                    <span class="sfield-hint">Maximum tokens in the model's response</span>
-                  </div>
-                  <div class="sslider-row">
-                    <input type="range" id="s-max-tokens" min="256" max="16384" step="256" value="4096"/>
-                    <input type="number" id="s-max-tokens-num" class="sslider-num" min="256" max="16384" step="256" value="4096" aria-label="Max tokens value"/>
-                  </div>
-                </div>
-
-                <!-- API Profiles -->
-                <div class="sfield" id="sfield-profiles">
-                  <div class="sfield-meta">
-                    <label class="sfield-label">API Profiles</label>
-                    <span class="sfield-hint">Save named configurations to switch providers quickly</span>
-                  </div>
-                  <div id="profiles-list"></div>
-                  <div class="profile-save-row">
-                    <input type="text" id="profile-name-input" class="sfield-input" placeholder="Profile name (e.g. OpenAI, Local)" autocomplete="off" maxlength="32"/>
-                    <button id="btn-save-profile" class="sfield-fetch-btn" type="button">+ Save current</button>
-                  </div>
-                </div>
-
-              </div>
+          <div className="topbar-right">
+            {pipeOk
+              ? <span className="pill is-signal"><span className="pill-dot"/>live</span>
+              : <span className="pill" style={{color:'var(--ink-4)'}}>disconnected</span>}
+            <button className="iconpill" title="tweaks" onClick={() => setTweaksOpen(o => !o)}>
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                <circle cx="8" cy="8" r="1.5" fill="currentColor"/>
+                <circle cx="3" cy="8" r="1.5" fill="currentColor"/>
+                <circle cx="13" cy="8" r="1.5" fill="currentColor"/>
+              </svg>
+            </button>
+            <div className="win-controls">
+              <button className="win-btn" onClick={() => window.rook?.minimize()} title="minimize">−</button>
+              <button className="win-btn" onClick={() => window.rook?.maximize()} title="maximize">□</button>
+              <button className="win-btn close" onClick={() => window.rook?.close()} title="close">×</button>
             </div>
+          </div>
+        </header>
 
-            <!-- Appearance -->
-            <div class="scontent" id="scontent-appearance">
-              <div class="scontent-header">
-                <h2 class="scontent-title">Appearance</h2>
-                <p class="scontent-desc">Control how the Rook interface looks and behaves.</p>
-              </div>
-              <div class="scontent-body">
-
-                <div class="stoggle-row">
-                  <div class="stoggle-info">
-                    <span class="stoggle-name">Input hint</span>
-                    <span class="stoggle-desc">Show the keyboard shortcut tip below the chat input box</span>
-                  </div>
-                  <label class="stoggle-switch">
-                    <input type="checkbox" id="s-show-hint" checked/>
-                    <span class="stoggle-track"><span class="stoggle-thumb"></span></span>
-                  </label>
-                </div>
-
-                <div class="stoggle-row">
-                  <div class="stoggle-info">
-                    <span class="stoggle-name">Preview pane open by default</span>
-                    <span class="stoggle-desc">Automatically open the artifact viewer when a new conversation starts</span>
-                  </div>
-                  <label class="stoggle-switch">
-                    <input type="checkbox" id="s-preview-default"/>
-                    <span class="stoggle-track"><span class="stoggle-thumb"></span></span>
-                  </label>
-                </div>
-
-                <div class="stoggle-row">
-                  <div class="stoggle-info">
-                    <span class="stoggle-name">Launch at login</span>
-                    <span class="stoggle-desc">Start Rook automatically when Windows boots</span>
-                  </div>
-                  <label class="stoggle-switch">
-                    <input type="checkbox" id="s-autostart"/>
-                    <span class="stoggle-track"><span class="stoggle-thumb"></span></span>
-                  </label>
-                </div>
-
-              </div>
+        <div className="content">
+          {page === 'chat' && (
+            <div className="chat-layout has-rail">
+              <Chat
+                onHoverNode={setHoveredNode}
+                selectedNode={selectedNode}
+                onSelectNode={setSelectedNode}
+              />
+              <MapHUD
+                hoveredId={hoveredNode}
+                selectedId={selectedNode || hoveredNode}
+                onNodeHover={setHoveredNode}
+                onNodeClick={setSelectedNode}
+              />
+              <Rail onSelectNode={setSelectedNode}/>
             </div>
-
-            <!-- Plugins -->
-            <div class="scontent" id="scontent-plugins">
-              <div class="scontent-header">
-                <h2 class="scontent-title">Plugins &amp; Extensions</h2>
-                <p class="scontent-desc">Authenticate with GitHub to unlock plugin discovery, starred repos, and featured MCP servers in the plugin browser.</p>
-              </div>
-              <div class="scontent-body">
-
-                <div class="sfield">
-                  <div class="sfield-meta">
-                    <label class="sfield-label" for="s-github-token">GitHub Personal Access Token</label>
-                    <span class="sfield-hint">Enables plugin search via GitHub API (public repos scope is enough)</span>
-                  </div>
-                  <div class="sfield-secret">
-                    <input type="password" id="s-github-token" class="sfield-input sfield-input--mono" placeholder="github_pat_…" autocomplete="off" spellcheck="false"/>
-                    <button class="sfield-eye" type="button" data-for="s-github-token" title="Reveal token">
-                      <svg viewBox="0 0 16 16" fill="none" width="14" height="14"><path d="M1 8s2.5-5 7-5 7 5 7 5-2.5 5-7 5-7-5-7-5Z" stroke="currentColor" stroke-width="1.3"/><circle cx="8" cy="8" r="2" stroke="currentColor" stroke-width="1.3"/></svg>
-                    </button>
-                  </div>
-                </div>
-
-              </div>
-            </div>
-
-            <!-- System -->
-            <div class="scontent" id="scontent-system">
-              <div class="scontent-header">
-                <h2 class="scontent-title">System</h2>
-                <p class="scontent-desc">Advanced runtime configuration. Leave fields blank to use auto-detection.</p>
-              </div>
-              <div class="scontent-body">
-
-                <div class="sfield">
-                  <div class="sfield-meta">
-                    <label class="sfield-label" for="s-backend-path">Custom Backend Path</label>
-                    <span class="sfield-hint">Override the auto-detected <code>rook.exe</code> location</span>
-                  </div>
-                  <input type="text" id="s-backend-path" class="sfield-input sfield-input--mono" placeholder="C:\path\to\rook.exe" autocomplete="off" spellcheck="false"/>
-                </div>
-
-              </div>
-            </div>
-
-            <!-- Sticky footer -->
-            <div class="scontent-footer">
-              <span class="scontent-footer-note">
-                <svg viewBox="0 0 14 14" fill="none" width="12" height="12"><circle cx="7" cy="7" r="5.5" stroke="currentColor" stroke-width="1.2"/><path d="M7 6.5v3M7 4.5v.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
-                Changes take effect immediately
-              </span>
-              <button id="btn-save-settings" class="save-btn">
-                <svg viewBox="0 0 14 14" fill="none" width="13" height="13"><path d="M2 7l3.5 3.5L12 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                Save settings
-              </button>
-            </div>
-
-          </div><!-- /scontent-area -->
-        </div><!-- /settings-shell -->
-      </div>
-
-    </div><!-- /pages -->
-
-    <!-- ── Artifact viewer ── -->
-    <div id="artifact-pane" class="closed">
-      <div id="artifact-header">
-        <div id="artifact-tabs"></div>
-        <button id="btn-close-artifact" title="Close preview">
-          <svg viewBox="0 0 16 16" fill="none"><path d="M3 3l10 10M13 3L3 13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
-        </button>
-      </div>
-      <div id="artifact-body">
-        <!-- iframe injected per-tab -->
-      </div>
-    </div>
-
-  </div><!-- /shell -->
-</div><!-- /app -->
-
-<!-- ── Plugin detail modal ── -->
-<div id="plugin-modal" class="modal-overlay hidden">
-  <div class="modal-card">
-    <div class="modal-header">
-      <div class="modal-title-row">
-        <img id="modal-avatar" class="modal-avatar" src="" alt=""/>
-        <div>
-          <h3 id="modal-name"></h3>
-          <span id="modal-full-name"></span>
+          )}
+          {page === 'skills'   && <Skills/>}
+          {page === 'settings' && <Settings/>}
         </div>
       </div>
-      <button id="modal-close" class="modal-close-btn" title="Close">
-        <svg viewBox="0 0 16 16" fill="none"><path d="M3 3l10 10M13 3L3 13" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
-      </button>
-    </div>
-    <div class="modal-body">
-      <p id="modal-desc" class="modal-desc"></p>
-      <div class="modal-stats">
-        <span id="modal-stars" class="modal-stat">★ <span></span></span>
-        <span id="modal-forks" class="modal-stat">⑂ <span></span></span>
-        <span id="modal-lang" class="modal-stat lang"></span>
-        <span id="modal-updated" class="modal-stat"></span>
-      </div>
-      <div id="modal-topics" class="modal-topics"></div>
-      <div id="modal-category" class="modal-category-row"></div>
-    </div>
-    <div class="modal-footer">
-      <button id="modal-repo-btn" class="ia-btn">View on GitHub</button>
-      <button id="modal-install-btn" class="ia-btn install">Install</button>
-    </div>
-  </div>
-</div>
 
-<!-- ── Confirm modal (delete conversation, etc.) ── -->
-<div id="confirm-modal" class="hidden" role="dialog" aria-modal="true" aria-labelledby="confirm-title">
-  <div class="confirm-card">
-    <div class="confirm-title" id="confirm-title">Are you sure?</div>
-    <div class="confirm-body"  id="confirm-body"></div>
-    <div class="confirm-actions">
-      <button class="confirm-btn-cancel" id="confirm-cancel">Cancel</button>
-      <button class="confirm-btn-danger" id="confirm-ok">Delete</button>
+      <TweaksPanel
+        open={tweaksOpen}
+        onClose={() => setTweaksOpen(false)}
+        tweaks={tweaks}
+        setTweaks={setTweaks}
+      />
     </div>
-  </div>
-</div>
+  );
+}
 
-<!-- ── Toast notification stack ── -->
-<div id="toast-container"></div>
+// ── Mount ─────────────────────────────────────────────────
 
-<!-- ── Command palette (Ctrl+K) ── -->
-<div id="cmd-palette-overlay" class="hidden">
-  <div id="cmd-palette" role="dialog" aria-label="Command palette">
-    <div id="cmd-input-wrap">
-      <svg viewBox="0 0 16 16" fill="none" width="16" height="16"><circle cx="7" cy="7" r="4.5" stroke="currentColor" stroke-width="1.3"/><path d="M10.5 10.5l3 3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
-      <input id="cmd-input" type="text" placeholder="Search commands and conversations…" autocomplete="off" spellcheck="false"/>
-    </div>
-    <div id="cmd-results"></div>
-    <div id="cmd-palette-footer">
-      <span class="cmd-hint"><kbd>↑↓</kbd> navigate</span>
-      <span class="cmd-hint"><kbd>Enter</kbd> select</span>
-      <span class="cmd-hint"><kbd>Esc</kbd> close</span>
-    </div>
-  </div>
-</div>
-
-<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.10.0/highlight.min.js" crossorigin="anonymous" integrity="sha512-6yoqbrcLAHDWAdQmiRlHG4+m0g/CT/V9AGyxabG8j7Jk8j3r3K6due7oqpiRMZqcYe9WM2gPcaNNxnl2ux+3tA=="></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.2.4/purify.min.js" crossorigin="anonymous"></script>
-<script type="module" src="app.js"></script>
+ReactDOM.createRoot(document.getElementById('root')).render(
+  <BackendProvider>
+    <App/>
+  </BackendProvider>
+);
+</script>
 </body>
 </html>

@@ -16,6 +16,19 @@ const CHARS_PER_TOKEN: usize = 4;
 /// Leave at least this many tokens free for the response.
 const HISTORY_MAX_TOKENS: usize = 90_000;
 
+/// Best-effort provider tag from a base URL for the error log.
+fn detect_provider(base_url: &str) -> &'static str {
+    let u = base_url.to_ascii_lowercase();
+    if u.contains("groq.com") { "groq" }
+    else if u.contains("openai.com") { "openai" }
+    else if u.contains("anthropic.com") { "anthropic" }
+    else if u.contains("mistral.ai") { "mistral" }
+    else if u.contains("together.") { "together" }
+    else if u.contains("deepseek.com") { "deepseek" }
+    else if u.contains("localhost") || u.contains("127.0.0.1") { "local" }
+    else { "unknown" }
+}
+
 /// Per-conversation session todo lists. The AI writes to this via the
 /// `todo_write` tool and we replay it into the system prompt at the start
 /// of every team-mode iteration so the model stays on task across turns.
@@ -200,9 +213,13 @@ pub async fn handle_chat(
         .map(|s| s.to_string())
         .unwrap_or_else(|| Uuid::new_v4().to_string());
 
-    // Load prior conversation turns, trimmed to fit within the token budget.
-    // We fetch up to 200 rows and then drop the oldest ones from the front until
-    // the total character count is within HISTORY_MAX_TOKENS * CHARS_PER_TOKEN.
+    // Load prior conversation turns with a rolling-window strategy:
+    //   • last 12 turns verbatim (immediate context)
+    //   • older turns collapsed into a single extractive digest system message
+    //     (pointers only — the model can call `search_memory` for detail)
+    // Bounded at ~2k tokens regardless of conversation length.
+    const RECENT_TURNS: usize = 12;
+    const DIGEST_CHAR_LIMIT: usize = 1800;
     let conv_history: Vec<crate::llm::types::Message> = match ctx.memory.get_connection() {
         Ok(conn) => {
             let raw_pairs: Vec<(String, String)> = conn
@@ -218,23 +235,39 @@ pub async fn handle_chat(
                 })
                 .unwrap_or_default();
 
-            let max_chars = HISTORY_MAX_TOKENS * CHARS_PER_TOKEN;
-            let mut total_chars: usize = 0;
-            // Walk backwards from most-recent, keep messages that fit.
-            let mut kept: Vec<(String, String)> = raw_pairs
-                .into_iter()
-                .rev()
-                .take_while(|(_, content)| {
-                    let len = content.len();
-                    if total_chars.saturating_add(len) > max_chars {
-                        return false;
+            // Split into [older …, recent (last RECENT_TURNS)]
+            let (older, recent) = if raw_pairs.len() > RECENT_TURNS {
+                let split = raw_pairs.len() - RECENT_TURNS;
+                let mut v = raw_pairs;
+                let rest = v.split_off(split);
+                (v, rest)
+            } else {
+                (Vec::new(), raw_pairs)
+            };
+
+            // Extractive digest of older turns: role + first 120 chars of each.
+            // No LLM call, deterministic, bounded by DIGEST_CHAR_LIMIT.
+            let mut kept: Vec<(String, String)> = Vec::new();
+            if !older.is_empty() {
+                let mut digest = String::from(
+                    "Earlier in this conversation (digest — call search_memory for detail):\n",
+                );
+                for (role, content) in older.iter() {
+                    let snippet: String = content
+                        .chars()
+                        .take(120)
+                        .collect::<String>()
+                        .replace('\n', " ");
+                    digest.push_str(&format!("- {}: {}\n", role, snippet));
+                    if digest.len() > DIGEST_CHAR_LIMIT {
+                        digest.truncate(DIGEST_CHAR_LIMIT);
+                        digest.push_str("…\n");
+                        break;
                     }
-                    total_chars += len;
-                    true
-                })
-                .collect();
-            // Restore chronological order.
-            kept.reverse();
+                }
+                kept.push(("system".to_string(), digest));
+            }
+            kept.extend(recent);
             if kept.is_empty() {
                 // Absolute fallback: always include the single most recent exchange.
                 kept = conn
@@ -277,53 +310,63 @@ pub async fn handle_chat(
                 "INSERT INTO messages (id, conversation_id, role, content, created_at) VALUES (?1, ?2, 'user', ?3, ?4)",
                 rusqlite::params![&msg_id, &conv_id, message, now],
             );
+            // bump updated_at so the sidebar orders recently-active chats on top
+            let _ = conn.execute(
+                "UPDATE conversations SET updated_at = ?1 WHERE id = ?2",
+                rusqlite::params![now, &conv_id],
+            );
         }
     }
 
-    // Assemble curated context
-    let (curated_context, curated_struct) =
-        match crate::memory::sliding_window::SlidingWindow::new(ctx.memory.clone())
-            .assemble_context_packet(&ctx.llm, message, Some(conv_id.as_str()), Some(6000))
+    // Lean RAG: no bulk packet injection. The model gets a thin INDEX (top few
+    // node titles) as a hint so it knows what to ask about, then calls
+    // `search_memory` / `recall_detail` when it actually needs content.
+    // This replaces the old 6000-token packet stuffing.
+    let msg_trimmed = message.trim();
+    let char_count = msg_trimmed.len();
+    let word_count = msg_trimmed.split_whitespace().count();
+    let is_trivial = word_count <= 3 && char_count <= 20;
+
+    let (curated_context, curated_struct) = if is_trivial {
+        tracing::debug!("trivial message — skipping RAG index hint");
+        (None, None)
+    } else {
+        // Cheap top-K title query — no content, no summaries, no LLM summarization.
+        // Budget: ~150 tokens total for the hint block.
+        let curator = if ctx.gnn_available {
+            crate::memory::context::ContextCurator::new(ctx.memory.clone())
+        } else {
+            crate::memory::context::ContextCurator::without_gnn(ctx.memory.clone())
+        };
+        match curator
+            .curate_for_query(&ctx.llm, message, Some(24), Some(5))
             .await
         {
-            Ok((packet, struct_json)) if !packet.trim().is_empty() => {
-                (Some(packet), Some(struct_json))
-            }
-            Ok((_, _)) => (None, None),
-            Err(err) => {
-                warn!(
-                    "Sliding window assembly failed, falling back to legacy curator: {}",
-                    err
+            Ok(items) if !items.is_empty() => {
+                // Titles-only index hint. Keep under ~150 tokens.
+                let mut hint = String::from(
+                    "Memory index (titles only — call `search_memory` with a specific query for content):\n",
                 );
-                let curator = if ctx.gnn_available {
-                    crate::memory::context::ContextCurator::new(ctx.memory.clone())
-                } else {
-                    crate::memory::context::ContextCurator::without_gnn(ctx.memory.clone())
-                };
-                match curator
-                    .curate_for_query(&ctx.llm, message, Some(48), Some(6))
-                    .await
-                {
-                    Ok(items) if !items.is_empty() => {
-                        let nodes = serde_json::to_value(&items).unwrap_or(serde_json::Value::Null);
-                        let fallback_struct = serde_json::json!({ "memory": nodes });
-                        (
-                            Some(
-                                crate::memory::context::ContextCurator::format_context_packet(
-                                    &items,
-                                ),
-                            ),
-                            Some(fallback_struct),
-                        )
-                    }
-                    Ok(_) => (None, None),
-                    Err(err) => {
-                        warn!("Failed to curate context for chat request: {}", err);
-                        (None, None)
-                    }
+                for (i, item) in items.iter().take(5).enumerate() {
+                    let title = item.title.chars().take(80).collect::<String>();
+                    hint.push_str(&format!(
+                        "{}. [{}] {}\n",
+                        i + 1,
+                        item.node_type,
+                        title
+                    ));
                 }
+                let nodes = serde_json::to_value(&items).unwrap_or(serde_json::Value::Null);
+                let struct_json = serde_json::json!({ "memory": nodes });
+                (Some(hint), Some(struct_json))
             }
-        };
+            Ok(_) => (None, None),
+            Err(err) => {
+                warn!("RAG index query failed: {}", err);
+                (None, None)
+            }
+        }
+    };
 
     // Always emit ContextCurated before the first token so the UI panel
     // updates even when there are no memory nodes yet (empty state).
@@ -391,11 +434,13 @@ pub async fn handle_chat(
                 if chars / CHARS_PER_TOKEN <= HISTORY_MAX_TOKENS {
                     break;
                 }
-                // Skip all leading system messages to preserve injected context/instructions
-                let remove_idx = messages
-                    .iter()
-                    .position(|m| m.role.as_str() != "system")
-                    .unwrap_or(0);
+                // Skip all leading system messages to preserve injected context/instructions.
+                // If nothing but system remains, stop — better an over-budget prompt than a
+                // truncated instruction header.
+                let Some(remove_idx) = messages.iter().position(|m| m.role.as_str() != "system")
+                else {
+                    break;
+                };
                 messages.remove(remove_idx);
             }
         }
@@ -570,57 +615,69 @@ pub async fn handle_chat(
         }
     }
 
-    // Resolve effective LLM: runtime override → per-request param overrides → env defaults
+    // Resolve effective LLM: runtime override → per-request param overrides → env defaults.
+    //
+    // IMPORTANT: many providers (Groq, Anthropic) count max_tokens against their
+    // per-minute rate limit BEFORE generation. A default of 8192 eats ~8k of the
+    // budget regardless of whether the model ends up using it. Cap per mode:
+    //   Chat/Assistant  → 2048  (most replies are 50–500 tokens)
+    //   Code/Coder      → 4096  (longer code blocks)
+    //   Team            → 8192  (agent loops can need it)
+    let default_mode = agent_mode.unwrap_or("Chat");
+    let mode_max_tokens: u32 = match default_mode {
+        "Team" => 8192,
+        "Code" | "Coder" => 4096,
+        _ => 2048,
+    };
+
     let effective_llm_storage;
-    let effective_llm: &LLMClient = if temperature.is_some() || max_tokens.is_some() {
+    let effective_llm: &LLMClient = {
         let mut cfg = ctx
             .config_override
             .lock()
             .ok()
             .and_then(|g| g.clone())
             .unwrap_or_else(|| ctx.llm.base_config().clone());
+        // Honor user-supplied max_tokens when reasonable, else cap to mode default.
+        cfg.max_tokens = max_tokens.unwrap_or(mode_max_tokens).min(mode_max_tokens);
         if let Some(t) = temperature {
             cfg.temperature = t;
         }
-        if let Some(m) = max_tokens {
-            cfg.max_tokens = m;
-        }
         effective_llm_storage = LLMClient::new(cfg);
         &effective_llm_storage
-    } else {
-        match ctx.config_override.lock().ok().and_then(|g| g.clone()) {
-            Some(cfg) => {
-                effective_llm_storage = LLMClient::new(cfg);
-                &effective_llm_storage
-            }
-            None => &ctx.llm,
-        }
     };
 
-    // Inject user facts (reuses the fetch from earlier — no second DB hit)
+    // Lean user-profile hint: only the identity keys the model needs upfront
+    // (name, pronouns, timezone). Everything else is retrievable via
+    // `search_memory` when relevant. Full dump was ~1k tokens per turn.
     if !user_facts.is_empty() {
-        let raw_facts = user_facts
+        let core_keys = ["name", "full_name", "pronouns", "timezone", "location"];
+        let essentials: Vec<String> = user_facts
             .iter()
+            .filter(|(k, _)| core_keys.contains(&k.to_ascii_lowercase().as_str()))
             .map(|(k, v)| format!("• {}: {}", k, v))
-            .collect::<Vec<_>>()
-            .join("\n");
-        const FACTS_CHAR_LIMIT: usize = 4000;
-        let facts_text = if raw_facts.len() > FACTS_CHAR_LIMIT {
-            format!(
-                "{}…\n[{} facts total — truncated to fit context window]",
-                &raw_facts[..FACTS_CHAR_LIMIT],
-                user_facts.len()
-            )
+            .collect();
+
+        if !essentials.is_empty() {
+            let more = user_facts.len().saturating_sub(essentials.len());
+            let mut hint = String::from("# User (essentials)\n");
+            hint.push_str(&essentials.join("\n"));
+            if more > 0 {
+                hint.push_str(&format!(
+                    "\n[+{} more facts available via search_memory]",
+                    more
+                ));
+            }
+            messages.push(crate::llm::types::Message::text("system", hint));
         } else {
-            raw_facts
-        };
-        messages.push(crate::llm::types::Message::text(
-            "system",
-            format!(
-                "# User Profile\nKnown facts about the user:\n{}",
-                facts_text
-            ),
-        ));
+            messages.push(crate::llm::types::Message::text(
+                "system",
+                format!(
+                    "# User\n[{} facts stored — query with search_memory if needed]",
+                    user_facts.len()
+                ),
+            ));
+        }
     }
 
     // Small-to-large router: a trivial message ("hi", "thanks", "ok") doesn't
@@ -721,6 +778,22 @@ Guidelines:
     let stream_result = effective_llm
         .chat_stream_for_model(messages.clone(), model)
         .await;
+
+    if let Err(ref e) = stream_result {
+        let est = messages.iter().map(|m| m.content.len()).sum::<usize>() / 4;
+        crate::error_log::record(crate::error_log::ErrorContext {
+            source: "llm_api::chat_mode_stream",
+            message: &format!("{}", e),
+            conversation_id: Some(conv_id),
+            model,
+            provider: Some(detect_provider(&effective_llm.base_config().base_url)),
+            agent_mode: Some("Chat"),
+            max_tokens: Some(effective_llm.base_config().max_tokens),
+            prompt_preview: Some(crate::error_log::preview_messages(&messages)),
+            est_input_tokens: Some(est),
+            extra: None,
+        });
+    }
 
     let mut content = String::new();
     let mut usage: Option<TokenUsage> = None;
@@ -1791,9 +1864,47 @@ async fn handle_streaming_fallback(
     let system_text = format!("Agent mode: {}", mode_name);
     messages.insert(0, crate::llm::types::Message::text("system", system_text));
 
+    // Token accounting for debugging context bloat
+    let total_chars: usize = messages.iter().map(|m| m.content.len()).sum();
+    let est_tokens = total_chars / 4;
+    tracing::info!(
+        "[chat→{}] dispatching {} messages, ~{} tokens, {} chars",
+        mode_name,
+        messages.len(),
+        est_tokens,
+        total_chars
+    );
+    for (i, m) in messages.iter().enumerate() {
+        tracing::info!(
+            "  msg[{}] role={} {}chars: {}",
+            i,
+            m.role,
+            m.content.len(),
+            m.content.chars().take(100).collect::<String>().replace('\n', " ")
+        );
+    }
+
     let stream_result = effective_llm
         .chat_stream_for_model(messages.clone(), model)
         .await;
+
+    // Capture rich error context for post-mortem debugging before any fallback
+    // logic kicks in. This lands in error.log as a single JSON line.
+    if let Err(ref e) = stream_result {
+        let est = messages.iter().map(|m| m.content.len()).sum::<usize>() / 4;
+        crate::error_log::record(crate::error_log::ErrorContext {
+            source: "llm_api::chat_stream_for_model",
+            message: &format!("{}", e),
+            conversation_id: Some(conv_id),
+            model,
+            provider: Some(detect_provider(&effective_llm.base_config().base_url)),
+            agent_mode: Some(mode_name),
+            max_tokens: Some(effective_llm.base_config().max_tokens),
+            prompt_preview: Some(crate::error_log::preview_messages(&messages)),
+            est_input_tokens: Some(est),
+            extra: None,
+        });
+    }
 
     match stream_result {
         Ok(Some(resp)) => {
@@ -1982,6 +2093,10 @@ fn persist_assistant_message(
         let _ = conn.execute(
             "INSERT INTO messages (id, conversation_id, role, content, created_at) VALUES (?1, ?2, 'assistant', ?3, ?4)",
             rusqlite::params![&msg_id, conv_id, content, now],
+        );
+        let _ = conn.execute(
+            "UPDATE conversations SET updated_at = ?1 WHERE id = ?2",
+            rusqlite::params![now, conv_id],
         );
     }
 }
@@ -2390,7 +2505,8 @@ fn auto_index_file(
 /// path isn't in a git repo, or git isn't available.
 fn git_diff_for_file(abs_path: &str) -> Option<String> {
     let parent = std::path::Path::new(abs_path).parent()?;
-    let output = std::process::Command::new("git")
+    let mut cmd = std::process::Command::new("git");
+    let output = crate::os::hide(&mut cmd)
         .args(["diff", "HEAD", "--", abs_path])
         .current_dir(parent)
         .output()
@@ -2402,7 +2518,8 @@ fn git_diff_for_file(abs_path: &str) -> Option<String> {
     let trimmed = diff.trim();
     if trimmed.is_empty() {
         // Also check working-tree-only changes (untracked diff against index)
-        let output2 = std::process::Command::new("git")
+        let mut cmd2 = std::process::Command::new("git");
+        let output2 = crate::os::hide(&mut cmd2)
             .args(["diff", "--", abs_path])
             .current_dir(parent)
             .output()

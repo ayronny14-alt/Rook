@@ -1,7 +1,7 @@
 {
   "name": "rook",
   "version": "0.1.7",
-  "description": "Rook AI Assistant – Electron frontend",
+  "description": "Rook AI Assistant - Electron frontend",
   "main": "src/main.js",
   "scripts": {
     "start": "electron .",
@@ -20,9 +20,6 @@
   "dependencies": {
     "electron-updater": "^6.8.3"
   },
-  "bundledDependencies": [
-    "electron-updater"
-  ],
   "devDependencies": {
     "electron": "^41.1.1",
     "electron-builder": "^25.1.8"
@@ -34,13 +31,31 @@
     "beforeBuild": "scripts/verify-backend.js",
     "files": [
       "**/*",
+      "node_modules/electron-updater/**/*",
+      "node_modules/builder-util-runtime/**/*",
+      "node_modules/js-yaml/**/*",
+      "node_modules/lazy-val/**/*",
+      "node_modules/lodash.escaperegexp/**/*",
+      "node_modules/lodash.isequal/**/*",
+      "node_modules/fs-extra/**/*",
+      "node_modules/graceful-fs/**/*",
+      "node_modules/jsonfile/**/*",
+      "node_modules/universalify/**/*",
+      "node_modules/semver/**/*",
+      "node_modules/tiny-typed-emitter/**/*",
+      "node_modules/sax/**/*",
+      "node_modules/debug/**/*",
+      "node_modules/ms/**/*",
+      "node_modules/argparse/**/*",
       "!**/.env",
       "!**/.env.*",
       "!**/*.map",
       "!**/node_modules/.cache/**",
       "!**/node_modules/**/{CHANGELOG.md,README.md,readme.md,CONTRIBUTING.md,LICENSE,license,*.d.ts,*.md,.github,.npmignore,tsconfig*,test,tests,__tests__,example,examples,docs,doc}"
     ],
-    "asarUnpack": [],
+    "asarUnpack": [
+      "node_modules/electron-updater/**/*"
+    ],
     "extraResources": [
       {
         "from": "../backend/target/release/rook.exe",

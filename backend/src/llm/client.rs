@@ -1,8 +1,9 @@
 use anyhow::{Context, Result};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
-use tracing::{info, warn};
+use std::collections::{HashMap, VecDeque};
+use std::sync::{Arc, Mutex, OnceLock};
+use tracing::{debug, info, warn};
 
 use crate::llm::types::{
     ChatCompletionRequest, ChatCompletionResponse, Choice, EmbeddingProvider, EmbeddingRequest,
@@ -340,7 +341,7 @@ impl LLMClient {
             max_tokens: Some(self.config.max_tokens),
             temperature: Some(self.config.temperature),
             stream: Some(true),
-            user: None,
+            user: install_user_id(&self.config.api_key),
         };
 
         let mut req = self
@@ -432,20 +433,49 @@ impl LLMClient {
     }
 
     pub async fn get_embedding(&self, text: &str) -> Result<Vec<f32>> {
-        match self.config.embedding_provider {
-            EmbeddingProvider::Mock => Ok(self.mock_embedding(text)),
-            EmbeddingProvider::OpenAiCompatible => self.get_remote_embedding(text).await,
+        // Process-wide LRU cache keyed by (provider, model, content-hash).
+        // Re-embedding the same text is a no-op network call otherwise —
+        // memory writes, searches, and re-ranks all share this cache.
+        let key = embedding_cache_key(
+            &self.config.embedding_provider,
+            &self.config.embedding_model,
+            text,
+        );
+        if let Some(hit) = embedding_cache().get(&key) {
+            debug!("embedding cache hit ({}b)", text.len());
+            return Ok(hit);
+        }
+
+        let vec = match self.config.embedding_provider {
+            EmbeddingProvider::Native => crate::memory::local_embed::embed(text),
+            EmbeddingProvider::Mock => self.mock_embedding(text),
+            EmbeddingProvider::OpenAiCompatible => {
+                // Fall back to native if unconfigured rather than hanging on network.
+                if self.config.embedding_api_key.trim().is_empty() {
+                    crate::memory::local_embed::embed(text)
+                } else {
+                    match self.get_remote_embedding(text).await {
+                        Ok(v) => v,
+                        Err(err) => {
+                            warn!(
+                                "Remote embedding failed ({}) — using native embedder",
+                                err
+                            );
+                            crate::memory::local_embed::embed(text)
+                        }
+                    }
+                }
+            }
             EmbeddingProvider::Ollama => match self.get_ollama_embedding(text).await {
-                Ok(embedding) => Ok(embedding),
+                Ok(embedding) => embedding,
                 Err(err) => {
-                    warn!(
-                        "Falling back to deterministic mock embeddings because Ollama embedding request failed: {}",
-                        err
-                    );
-                    Ok(self.mock_embedding(text))
+                    warn!("Ollama embedding failed ({}) — using native embedder", err);
+                    crate::memory::local_embed::embed(text)
                 }
             },
-        }
+        };
+        embedding_cache().put(key, vec.clone());
+        Ok(vec)
     }
 
     async fn get_remote_embedding(&self, text: &str) -> Result<Vec<f32>> {
@@ -600,6 +630,78 @@ impl LLMClient {
 
         values
     }
+}
+
+// ── Embedding LRU cache ──────────────────────────────────────────────────
+//
+// Cheap FIFO-style LRU. Keyed by (provider, model, blake-ish hash of content).
+// Bounded to 4096 entries (~4096 × 768 × 4B ≈ 12MB) so it won't grow unbounded.
+// Massive speedup for repeat queries, re-embeds during write dedup, re-ranks
+// after vector search, and the periodic UI indexer — all hit the cache.
+
+const EMBEDDING_CACHE_CAP: usize = 4096;
+
+struct EmbeddingCache {
+    map: HashMap<u64, Vec<f32>>,
+    order: VecDeque<u64>,
+}
+
+impl EmbeddingCache {
+    fn new() -> Self {
+        Self {
+            map: HashMap::with_capacity(EMBEDDING_CACHE_CAP),
+            order: VecDeque::with_capacity(EMBEDDING_CACHE_CAP),
+        }
+    }
+    fn get(&self, key: &u64) -> Option<Vec<f32>> {
+        self.map.get(key).cloned()
+    }
+    fn put(&mut self, key: u64, value: Vec<f32>) {
+        if self.map.contains_key(&key) {
+            return;
+        }
+        if self.map.len() >= EMBEDDING_CACHE_CAP {
+            if let Some(old) = self.order.pop_front() {
+                self.map.remove(&old);
+            }
+        }
+        self.map.insert(key, value);
+        self.order.push_back(key);
+    }
+}
+
+struct EmbeddingCacheHandle {
+    inner: Mutex<EmbeddingCache>,
+}
+
+impl EmbeddingCacheHandle {
+    fn get(&self, key: &u64) -> Option<Vec<f32>> {
+        self.inner.lock().ok().and_then(|g| g.get(key))
+    }
+    fn put(&self, key: u64, value: Vec<f32>) {
+        if let Ok(mut g) = self.inner.lock() {
+            g.put(key, value);
+        }
+    }
+}
+
+fn embedding_cache() -> &'static EmbeddingCacheHandle {
+    static CACHE: OnceLock<EmbeddingCacheHandle> = OnceLock::new();
+    CACHE.get_or_init(|| EmbeddingCacheHandle {
+        inner: Mutex::new(EmbeddingCache::new()),
+    })
+}
+
+fn embedding_cache_key(provider: &EmbeddingProvider, model: &str, text: &str) -> u64 {
+    // stable hash — std DefaultHasher is enough; collisions just force a refetch
+    use std::hash::{Hash, Hasher};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    (provider as *const _ as usize).hash(&mut h);
+    // include provider value so mock and remote don't share entries
+    format!("{:?}", provider).hash(&mut h);
+    model.hash(&mut h);
+    text.hash(&mut h);
+    h.finish()
 }
 
 #[cfg(test)]

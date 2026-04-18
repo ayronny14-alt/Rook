@@ -156,7 +156,8 @@ pub(crate) async fn run_cmd_test(program: &str, args: &[&str], cwd: &Path) -> Re
 }
 
 async fn run_command(program: &str, args: &[&str], cwd: &Path) -> Result<String> {
-    let child = tokio::process::Command::new(program)
+    let mut cmd = tokio::process::Command::new(program);
+    let child = crate::os::hide_tokio(&mut cmd)
         .args(args)
         .current_dir(cwd)
         .output();

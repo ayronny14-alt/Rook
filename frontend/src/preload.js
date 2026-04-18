@@ -12,6 +12,7 @@ contextBridge.exposeInMainWorld('rook', {
   onTrayNewChat:     (cb)     => { ipcRenderer.on('tray-new-chat', cb); },
   onLoginItemState:  (cb)     => { ipcRenderer.on('login-item-state', (_, v) => cb(v)); },
   reconnectNow:      ()       => ipcRenderer.send('reconnect-now'),
+  getPipeStatus:     ()       => ipcRenderer.invoke('get-pipe-status'),
   openExternal:      (url)    => ipcRenderer.invoke('open-external', url),
   browsePlugins:     (opts)   => ipcRenderer.invoke('browse-plugins', opts),
   searchGitHub:      (query)  => ipcRenderer.invoke('github-search', query),

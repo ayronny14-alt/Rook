@@ -146,10 +146,13 @@ impl LspManager {
             .ok_or_else(|| anyhow::anyhow!("No LSP server configured for '{}'", lang))?;
 
         // Check if server binary exists
-        let which = if cfg!(windows) {
-            Command::new("where").arg(bin).output()
-        } else {
-            Command::new("which").arg(bin).output()
+        let which = {
+            let mut cmd = if cfg!(windows) {
+                Command::new("where")
+            } else {
+                Command::new("which")
+            };
+            crate::os::hide(&mut cmd).arg(bin).output()
         };
         if which.map(|o| !o.status.success()).unwrap_or(true) {
             anyhow::bail!(

@@ -329,11 +329,6 @@ pub async fn handle_pin_conversation(
     pinned: bool,
 ) -> Result<IPCResponse> {
     if let Ok(conn) = ctx.memory.get_connection() {
-        // Ensure column exists
-        let _ = conn.execute(
-            "ALTER TABLE conversations ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0",
-            [],
-        );
         let _ = conn.execute(
             "UPDATE conversations SET pinned = ?1 WHERE id = ?2",
             rusqlite::params![pinned as i32, conversation_id],

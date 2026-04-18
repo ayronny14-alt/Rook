@@ -19,14 +19,15 @@ impl TerminalTool {
             .and_then(|v| v.parse::<u64>().ok())
             .unwrap_or(30);
 
+        let mut proc = tokio::process::Command::new("cmd");
+        crate::os::hide_tokio(&mut proc)
+            .args(["/C", command])
+            .current_dir(&cwd)
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped());
         let output = tokio::time::timeout(
             Duration::from_secs(timeout_secs),
-            tokio::process::Command::new("cmd")
-                .args(["/C", command])
-                .current_dir(&cwd)
-                .stdout(std::process::Stdio::piped())
-                .stderr(std::process::Stdio::piped())
-                .output(),
+            proc.output(),
         )
         .await
         .map_err(|_| anyhow::anyhow!("Command timed out after {} seconds", timeout_secs))?

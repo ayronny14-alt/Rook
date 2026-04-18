@@ -4,6 +4,7 @@ pub mod embedding;
 pub mod feedback;
 pub mod gnn;
 pub mod graph;
+pub mod local_embed;
 pub mod object;
 pub mod sliding_window;
 pub mod storage;

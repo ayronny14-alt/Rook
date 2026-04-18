@@ -2,6 +2,8 @@
 use anyhow::Result;
 use tracing::debug;
 
+use crate::os::hide_tokio;
+
 pub struct GitTool;
 
 impl GitTool {
@@ -12,7 +14,8 @@ impl GitTool {
             .or_else(|| std::env::current_dir().ok())
             .unwrap_or_else(|| std::path::PathBuf::from("."));
         debug!("git status in {:?}", dir);
-        let out = tokio::process::Command::new("git")
+        let mut cmd = tokio::process::Command::new("git");
+        let out = hide_tokio(&mut cmd)
             .args(["status", "--short", "--branch"])
             .current_dir(&dir)
             .output()
@@ -28,7 +31,8 @@ impl GitTool {
             .or_else(|| std::env::current_dir().ok())
             .unwrap_or_else(|| std::path::PathBuf::from("."));
         debug!("git log -{} in {:?}", n, dir);
-        let out = tokio::process::Command::new("git")
+        let mut cmd = tokio::process::Command::new("git");
+        let out = hide_tokio(&mut cmd)
             .args(["log", &format!("-{}", n), "--oneline", "--decorate"])
             .current_dir(&dir)
             .output()
@@ -40,14 +44,13 @@ impl GitTool {
     pub async fn diff(&self, file_path: Option<&str>) -> Result<String> {
         let dir = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
         let mut cmd = tokio::process::Command::new("git");
-        cmd.arg("diff").arg("--stat").current_dir(&dir);
+        hide_tokio(&mut cmd).arg("diff").arg("--stat").current_dir(&dir);
         if let Some(fp) = file_path {
             cmd.arg("--").arg(fp);
         }
         let out = cmd.output().await?;
-        // Also get the actual patch (limit to 4000 chars to avoid context flood)
         let mut patch_cmd = tokio::process::Command::new("git");
-        patch_cmd.arg("diff").current_dir(&dir);
+        hide_tokio(&mut patch_cmd).arg("diff").current_dir(&dir);
         if let Some(fp) = file_path {
             patch_cmd.arg("--").arg(fp);
         }
@@ -61,7 +64,8 @@ impl GitTool {
     /// Return the current branch name.
     pub async fn branch(&self) -> Result<String> {
         let dir = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
-        let out = tokio::process::Command::new("git")
+        let mut cmd = tokio::process::Command::new("git");
+        let out = hide_tokio(&mut cmd)
             .args(["rev-parse", "--abbrev-ref", "HEAD"])
             .current_dir(&dir)
             .output()
@@ -73,13 +77,15 @@ impl GitTool {
     pub async fn commit(&self, message: &str, files: &[&str]) -> Result<String> {
         let dir = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
         for f in files {
-            tokio::process::Command::new("git")
+            let mut cmd = tokio::process::Command::new("git");
+            hide_tokio(&mut cmd)
                 .args(["add", f])
                 .current_dir(&dir)
                 .output()
                 .await?;
         }
-        let out = tokio::process::Command::new("git")
+        let mut cmd = tokio::process::Command::new("git");
+        let out = hide_tokio(&mut cmd)
             .args(["commit", "-m", message])
             .current_dir(&dir)
             .output()

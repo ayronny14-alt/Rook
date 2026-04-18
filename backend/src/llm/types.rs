@@ -3,20 +3,29 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum EmbeddingProvider {
+    /// Built-in, zero-dependency native embedder. Deterministic feature-hashed
+    /// bag of word tokens + char n-grams. This is the default — no model
+    /// download, no network, no extra process.
+    Native,
+    /// Legacy mock (xor-shift random vectors). Kept only for tests that rely
+    /// on its reproducibility.
     Mock,
+    /// OpenAI-compatible `/embeddings` endpoint (text-embedding-3-small etc.).
     OpenAiCompatible,
+    /// Ollama host, e.g. `nomic-embed-text`. Opt-in only.
     Ollama,
 }
 
 impl EmbeddingProvider {
     pub fn from_env_value(value: &str) -> Self {
         match value.trim().to_ascii_lowercase().as_str() {
+            "native" | "local" | "rook" | "builtin" | "built-in" => Self::Native,
             "mock" => Self::Mock,
             "openai" | "openai-compatible" | "openai_compatible" | "remote" => {
                 Self::OpenAiCompatible
             }
-            "ollama" | "local" | "local_ollama" => Self::Ollama,
-            _ => Self::Ollama,
+            "ollama" | "local_ollama" => Self::Ollama,
+            _ => Self::Native,
         }
     }
 }
@@ -40,15 +49,11 @@ impl LLMConfig {
             .unwrap_or_else(|_| "https://api.openai.com/v1".to_string());
         let api_key = std::env::var("ROOK_LLM_API_KEY").unwrap_or_else(|_| String::new());
 
+        // Default to the native embedder — zero-dep, no network, instant.
+        // Opt into remote/ollama by setting ROOK_EMBEDDING_PROVIDER.
         let embedding_provider = std::env::var("ROOK_EMBEDDING_PROVIDER")
             .map(|v| EmbeddingProvider::from_env_value(&v))
-            .unwrap_or_else(|_| {
-                if api_key.trim().is_empty() {
-                    EmbeddingProvider::Ollama
-                } else {
-                    EmbeddingProvider::OpenAiCompatible
-                }
-            });
+            .unwrap_or(EmbeddingProvider::Native);
 
         let embedding_base_url =
             std::env::var("ROOK_EMBEDDING_BASE_URL").unwrap_or_else(|_| match embedding_provider {
@@ -58,6 +63,7 @@ impl LLMConfig {
 
         let embedding_model =
             std::env::var("ROOK_EMBEDDING_MODEL").unwrap_or_else(|_| match embedding_provider {
+                EmbeddingProvider::Native => "rook-native-v1".to_string(),
                 EmbeddingProvider::Ollama => "nomic-embed-text".to_string(),
                 _ => "text-embedding-3-small".to_string(),
             });

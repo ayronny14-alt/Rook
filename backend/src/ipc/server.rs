@@ -231,14 +231,23 @@ impl IPCServer {
             }
             rate_count += 1;
             if rate_count > RATE_LIMIT {
+                let retry_ms = RATE_WINDOW_MS
+                    .saturating_sub(now.duration_since(rate_window_start).as_millis());
                 warn!(
-                    "IPC rate limit exceeded ({} msg/s) — dropping message",
-                    rate_count
+                    "IPC rate limit exceeded ({} msg/s) — retry in {}ms",
+                    rate_count, retry_ms
                 );
+                let id_rl = serde_json::from_str::<serde_json::Value>(trimmed)
+                    .ok()
+                    .and_then(|v| v.get("id").and_then(|i| i.as_str().map(str::to_string)))
+                    .unwrap_or_else(|| "rate-limited".to_string());
                 let _ = write_tx
                     .send(IPCResponse::Error {
-                        id: "rate-limited".to_string(),
-                        message: "Rate limit exceeded — slow down requests".to_string(),
+                        id: id_rl,
+                        message: format!(
+                            "Rate limit exceeded ({} msg/s) — retry in {}ms",
+                            RATE_LIMIT, retry_ms
+                        ),
                     })
                     .await;
                 continue;
@@ -776,12 +785,17 @@ async fn dispatch(request: &IPCRequest, ctx: &HandlerCtx) -> Result<IPCResponse>
                 ctx.memory.clone(),
                 effective_llm,
             );
-            let n = indexer.index_directory(dir).await.unwrap_or(0);
-            Ok(IPCResponse::DirectoryIndexed {
-                id: id.clone(),
-                path: path.clone(),
-                files_indexed: n,
-            })
+            match indexer.index_directory(dir).await {
+                Ok(n) => Ok(IPCResponse::DirectoryIndexed {
+                    id: id.clone(),
+                    path: path.clone(),
+                    files_indexed: n,
+                }),
+                Err(e) => Ok(IPCResponse::Error {
+                    id: id.clone(),
+                    message: format!("Index failed: {}", e),
+                }),
+            }
         }
 
         IPCRequest::DeleteConversation {
