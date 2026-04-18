@@ -130,6 +130,7 @@ impl ShellManager {
         for (k, v) in &env_vars {
             cmd.env(k, v);
         }
+        crate::os::hide_tokio(&mut cmd);
 
         let mut child = cmd.spawn().map_err(|e| anyhow!("spawn failed: {}", e))?;
         let stdout = child.stdout.take().ok_or_else(|| anyhow!("no stdout"))?;
@@ -300,6 +301,7 @@ impl ShellManager {
         for (k, v) in &env_vars {
             cmd.env(k, v);
         }
+        crate::os::hide_tokio(&mut cmd);
 
         if background {
             // Spawn and stash the handle

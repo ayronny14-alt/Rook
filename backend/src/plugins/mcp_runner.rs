@@ -558,6 +558,8 @@ impl McpProcess {
             "Spawning MCP server '{}': {} {:?}",
             plugin_id, real_program, real_args
         );
+        crate::os::hide_tokio(&mut cmd);
+
         let child = cmd.spawn().with_context(|| {
             format!(
                 "spawn MCP process '{} {:?}' in {:?}",

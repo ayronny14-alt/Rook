@@ -181,11 +181,13 @@ impl LspManager {
             root.display()
         );
 
-        let mut child = Command::new(bin)
-            .args(&args)
+        let mut cmd = Command::new(bin);
+        cmd.args(&args)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
-            .stderr(Stdio::null())
+            .stderr(Stdio::null());
+        crate::os::hide(&mut cmd);
+        let mut child = cmd
             .spawn()
             .with_context(|| format!("Failed to start LSP server '{}'", bin))?;
 

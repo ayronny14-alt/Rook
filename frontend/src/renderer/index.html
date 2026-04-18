@@ -29,23 +29,8 @@
   </div>
 </div>
 
-<!-- ══════════════════════════════════════════════════
-     ONBOARDING OVERLAY — shown on first launch if not signed in
-═══════════════════════════════════════════════════ -->
-<div id="onboarding-overlay" class="hidden">
-  <div id="onboarding-box">
-    <div id="onboarding-wordmark">Rook</div>
-    <div id="onboarding-tagline">— connect your account to get started</div>
-    <p id="onboarding-body">
-      Sign in with your SVRN account to access AI models, usage tracking,
-      and automatic configuration — no API keys needed.
-    </p>
-    <div id="onboarding-actions">
-      <button id="btn-onboard-signin" class="onboard-btn-primary">Sign in with SVRN</button>
-      <button id="btn-onboard-skip"   class="onboard-btn-skip">Use custom API key →</button>
-    </div>
-  </div>
-</div>
+<!-- onboarding removed: Rook is BYO-API-key, no account flow. -->
+<div id="onboarding-overlay" class="hidden"></div>
 
 <!-- ══════════════════════════════════════════════════
      MAIN APP
@@ -482,60 +467,11 @@
               </div>
               <div class="scontent-body">
 
-                <!-- Platform account sign-in -->
-                <div id="platform-auth-block" style="border-left: 2px solid var(--accent); padding-left: 14px; margin-bottom: 24px;">
-
-                  <!-- Idle: not signed in -->
-                  <div id="platform-state-idle">
-                    <div class="sfield-meta" style="margin-bottom: 12px;">
-                      <label class="sfield-label">SVRN Platform</label>
-                      <span class="sfield-hint">Sign in to enable cloud AI models — nova-fast, qwen-coder, gemini-search. Opens your browser, no key required.</span>
-                    </div>
-                    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-                      <button id="btn-platform-signin" class="sfield-fetch-btn" type="button" style="padding: 6px 14px; font-size: 12px;">
-                        Sign in to SVRN →
-                      </button>
-                      <button id="btn-platform-simulate" class="sfield-fetch-btn" type="button" style="padding: 4px 10px; font-size: 11px; opacity: 0.55;" title="Dev mode only" hidden>
-                        Test (dev) →
-                      </button>
-                    </div>
-                  </div>
-
-                  <!-- Waiting: polling for authorization -->
-                  <div id="platform-state-waiting" hidden>
-                    <div class="sfield-meta" style="margin-bottom: 10px;">
-                      <label class="sfield-label" style="display:flex;align-items:center;gap:8px;">
-                        <span class="live-dot"></span>
-                        Waiting for authorization
-                      </label>
-                      <span class="sfield-hint">Authorize in the browser window that just opened, then come back.</span>
-                    </div>
-                    <button id="btn-platform-cancel" class="sfield-fetch-btn" type="button" style="padding: 4px 10px; font-size: 11px; opacity: 0.7;">
-                      Cancel
-                    </button>
-                  </div>
-
-                  <!-- Connected: signed in -->
-                  <div id="platform-state-connected" hidden>
-                    <div class="sfield-meta" style="margin-bottom: 10px;">
-                      <label class="sfield-label" style="display:flex;align-items:center;gap:8px;">
-                        <span style="width:6px;height:6px;border-radius:50%;background:var(--success);display:inline-block;flex-shrink:0;"></span>
-                        Connected to SVRN
-                      </label>
-                      <span class="sfield-hint" id="platform-account-info">—</span>
-                    </div>
-                    <button id="btn-platform-signout" class="sfield-fetch-btn" type="button" style="padding: 4px 10px; font-size: 11px; opacity: 0.7;">
-                      Sign out
-                    </button>
-                  </div>
-
-                </div>
-
                 <div id="custom-api-fields">
                 <div class="sfield">
                   <div class="sfield-meta">
-                    <label class="sfield-label" for="s-api-url">Custom API Base URL</label>
-                    <span class="sfield-hint">Any OpenAI-compatible endpoint — used when not signed into SVRN</span>
+                    <label class="sfield-label" for="s-api-url">API Base URL</label>
+                    <span class="sfield-hint">Any OpenAI-compatible endpoint.</span>
                   </div>
                   <input type="text" id="s-api-url" class="sfield-input" placeholder="https://api.openai.com/v1" autocomplete="off"/>
                 </div>

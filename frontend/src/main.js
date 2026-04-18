@@ -180,7 +180,8 @@ async function startUpdateInstall() {
     pipeReady = false;
     pendingQueue = [];
     try { pipeClient?.destroy(); } catch (_) {}
-    autoUpdater.quitAndInstall(false, true);
+    // isSilent=true hides the NSIS installer UI on update; isForceRunAfter=true relaunches.
+    autoUpdater.quitAndInstall(true, true);
     return publicUpdateState();
   }
   if (!updateState.updateAvailable) {

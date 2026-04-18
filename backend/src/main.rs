@@ -12,6 +12,7 @@ mod indexer;
 mod ipc;
 mod llm;
 mod memory;
+mod os;
 mod plugins;
 mod scheduler;
 mod skills;

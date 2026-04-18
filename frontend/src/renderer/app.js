@@ -251,15 +251,10 @@ function dismissStartup() {
   startupOverlay.classList.add('fade-out');
   appEl.classList.remove('hidden');
   setTimeout(() => startupOverlay.remove(), 500);
-  // Show onboarding prompt if user hasn't connected a platform account
-  const s = JSON.parse(localStorage.getItem('rook-settings') || '{}');
-  if (!s.platformApiKey) {
-    document.getElementById('onboarding-overlay')?.classList.remove('hidden');
-  }
 }
 
 function dismissOnboarding() {
-  document.getElementById('onboarding-overlay')?.classList.add('hidden');
+  // kept as a no-op so any stale callers don't throw
 }
 
 // ── First-run setup display ──────────────────────────────────────────────────
@@ -309,15 +304,6 @@ api.onAppInit?.((data) => {
 // Show the app after 1.5 s regardless — backend connects in background
 setTimeout(dismissStartup, 1500);
 
-document.getElementById('btn-onboard-signin')?.addEventListener('click', () => {
-  dismissOnboarding();
-  startPlatformSignIn(); // opens browser + starts UUID polling
-});
-
-document.getElementById('btn-onboard-skip')?.addEventListener('click', () => {
-  dismissOnboarding();
-  document.querySelector('[data-panel="settings"]')?.click();
-});
 
 // ════════════════════════════════════════
 // WINDOW CONTROLS
@@ -766,8 +752,6 @@ function formatError(raw) {
   const s = String(raw || 'Unknown error');
   const lo = s.toLowerCase();
 
-  if (/not signed in to svrn/i.test(s))
-    return `⚠ Sign in to SVRN to use this model — open Settings and click Sign In.`;
   if (/401|unauthorized|invalid.{0,10}api.{0,5}key/i.test(s))
     return `⚠ API key rejected — check your key in Settings.`;
   if (/429|rate.?limit|too many requests/i.test(s))
@@ -1539,238 +1523,12 @@ modelSelect.addEventListener('change', () => {
 
 
 // ════════════════════════════════════════
-// ── Platform sign-in (device auth flow) ─
-let PLATFORM_URL = 'https://svrnsys.com';
-// Resolve platform URL + dev mode from main process
-Promise.all([
-  api.getPlatformUrl?.() ?? Promise.resolve(PLATFORM_URL),
-  api.isDevMode?.()      ?? Promise.resolve(false),
-]).then(([url, dev]) => {
-  if (url) PLATFORM_URL = url;
-  if (dev) {
-    const simBtn = document.getElementById('btn-platform-simulate');
-    if (simBtn) simBtn.hidden = false;
-  }
-});
-const PLATFORM_MODELS_META = {
-  'nova-fast':    'nova-fast — Amazon Nova Micro',
-  'qwen-coder':   'qwen-coder — Qwen3 Coder 30B',
-  'gemini-search':'gemini-search — Gemini 2.5 Flash Lite',
-};
-
-let _pollTimer = null;
-
-function showPlatformState(state, data) {
-  document.getElementById('platform-state-idle').hidden      = state !== 'idle';
-  document.getElementById('platform-state-waiting').hidden   = state !== 'waiting';
-  document.getElementById('platform-state-connected').hidden = state !== 'connected';
-  if (state === 'connected' && data) {
-    const info = document.getElementById('platform-account-info');
-    if (info) info.textContent = `${data.plan?.charAt(0).toUpperCase() + data.plan?.slice(1)} plan · ${data.models?.length ?? 0} models available`;
-  }
-}
-
-function populatePlatformModels(models) {
-  const sel  = document.getElementById('s-model');
-  const main = document.getElementById('model-select');
-  [sel, main].forEach(s => {
-    if (!s) return;
-    // Remove old platform group
-    s.querySelector('optgroup[data-platform]')?.remove();
-    // Remove the "Loading…" placeholder if still present
-    const placeholder = s.querySelector('option[value=""]');
-    if (placeholder && placeholder.textContent === 'Loading…') placeholder.remove();
-
-    if (!models?.length) {
-      // No platform — restore a blank placeholder if select is empty
-      if (!s.options.length) {
-        const ph = document.createElement('option');
-        ph.value = ''; ph.textContent = '— select a model —';
-        s.appendChild(ph);
-      }
-      return;
-    }
-    const grp = document.createElement('optgroup');
-    grp.label = 'SVRN Platform';
-    grp.setAttribute('data-platform', '1');
-    for (const m of models) {
-      const opt = document.createElement('option');
-      opt.value = m;
-      opt.textContent = PLATFORM_MODELS_META[m] || m;
-      grp.appendChild(opt);
-    }
-    s.insertBefore(grp, s.firstChild);
-    // Auto-select first platform model if nothing is selected
-    if (!s.value) s.value = models[0];
-  });
-}
-
-function stopPolling() {
-  if (_pollTimer) { clearInterval(_pollTimer); _pollTimer = null; }
-}
-
-function pollPlatformSession(sessionId) {
-  stopPolling();
-  let tries = 0;
-  const maxTries = 150; // ~5 min at 2s intervals
-  _pollTimer = setInterval(async () => {
-    tries++;
-    if (tries > maxTries) { stopPolling(); showPlatformState('idle'); return; }
-    try {
-      const r = await fetch(`${PLATFORM_URL}/api/auth/desktop?session=${sessionId}`);
-      const d = await r.json();
-      if (d.status === 'claimed') {
-        stopPolling();
-        dismissOnboarding();
-        const s = JSON.parse(localStorage.getItem('rook-settings') || '{}');
-        s.platformApiKey = d.api_key;
-        s.platformPlan   = d.plan;
-        s.platformModels = d.models;
-        // Clear any saved custom API creds — platform handles routing now
-        delete s.apiUrl; delete s.apiKey;
-        localStorage.setItem('rook-settings', JSON.stringify(s));
-        api.saveEnvSettings?.({ ...s, platformUrl: PLATFORM_URL, platformApiKey: d.api_key });
-        api.send?.({ type: 'update_config', id: uid(), base_url: '', api_key: '', model: s.model || '', platform_url: PLATFORM_URL, platform_api_key: d.api_key });
-        showPlatformState('connected', d);
-        populatePlatformModels(d.models);
-      } else if (d.status === 'expired') {
-        stopPolling();
-        showPlatformState('idle');
-        toast('Sign-in session expired — please try again.', 'warn');
-      }
-    } catch (_) {
-      // Network errors during polling are transient; don't spam toasts
-    }
-  }, 2000);
-}
-
-async function startPlatformSignIn() {
-  const sessionId = crypto.randomUUID();
-  sessionStorage.setItem('platform-session-id', sessionId);
-  await api.openExternal(`${PLATFORM_URL}/auth/desktop?session=${sessionId}`);
-  showPlatformState('waiting');
-  pollPlatformSession(sessionId);
-}
-
-function platformSignOut() {
-  stopPolling();
-  const s = JSON.parse(localStorage.getItem('rook-settings') || '{}');
-  delete s.platformApiKey;
-  delete s.platformPlan;
-  delete s.platformModels;
-  localStorage.setItem('rook-settings', JSON.stringify(s));
-  api.saveEnvSettings?.({ ...s, platformApiKey: '', platformUrl: PLATFORM_URL });
-  populatePlatformModels([]);
-  showPlatformState('idle');
-}
-
-function syncPlatformAuthUI() {
-  const s = JSON.parse(localStorage.getItem('rook-settings') || '{}');
-  const fetchBtn  = document.getElementById('btn-fetch-models');
-  const modelHint = document.getElementById('s-model-hint');
-  if (s.platformApiKey) {
-    const data = { plan: s.platformPlan, models: s.platformModels, user: s.platformUser };
-    showPlatformState('connected', data);
-    populatePlatformModels(s.platformModels || []);
-    updatePlatformStatus(data);
-    if (fetchBtn)  fetchBtn.hidden = true;
-    if (modelHint) modelHint.textContent = 'SVRN models included free — or bring your own API key below';
-  } else {
-    showPlatformState('idle');
-    updatePlatformStatus(null);
-    if (fetchBtn)  fetchBtn.hidden = false;
-    if (modelHint) modelHint.textContent = 'Fetched from your API — select or type a model ID';
-  }
-}
-
-// ── Dev simulate: calls platform's /api/auth/desktop/simulate (DEV_AUTH only) ─
-async function simulatePlatformSignIn() {
-  const btn = document.getElementById('btn-platform-simulate');
-  if (btn) { btn.disabled = true; btn.textContent = 'Connecting…'; }
-  try {
-    const r = await fetch(`${PLATFORM_URL}/api/auth/desktop/simulate`, { method: 'POST' });
-    if (!r.ok) {
-      const err = await r.json().catch(() => ({}));
-      console.warn('Platform simulate failed:', err.error ?? r.status);
-      if (btn) { btn.disabled = false; btn.textContent = 'Test (dev) →'; }
-      return;
-    }
-    const d = await r.json();
-    const s = JSON.parse(localStorage.getItem('rook-settings') || '{}');
-    s.platformApiKey = d.api_key;
-    s.platformPlan   = d.plan;
-    s.platformModels = d.models;
-    s.platformUser   = d.user;
-    delete s.apiUrl; delete s.apiKey;
-    localStorage.setItem('rook-settings', JSON.stringify(s));
-    api.saveEnvSettings?.({ ...s, platformUrl: d.platform_url ?? PLATFORM_URL, platformApiKey: d.api_key });
-    api.send?.({ type: 'update_config', id: uid(), base_url: '', api_key: '', model: s.model || '', platform_url: d.platform_url ?? PLATFORM_URL, platform_api_key: d.api_key });
-    showPlatformState('connected', d);
-    populatePlatformModels(d.models);
-    updatePlatformStatus(d);
-  } catch (e) {
-    console.warn('Platform simulate error:', e);
-    if (btn) { btn.disabled = false; btn.textContent = 'Test (dev) →'; }
-  }
-}
-
-// ── Auto-refresh profile + models using saved api key ────────────────────────
-async function refreshPlatformSession() {
-  const s = JSON.parse(localStorage.getItem('rook-settings') || '{}');
-  // Bootstrap from .env if localStorage doesn't have the key yet (e.g. first launch after manual .env setup)
-  if (!s.platformApiKey) {
-    const envKey = await api.getPlatformApiKey?.().catch(() => '');
-    if (envKey) {
-      s.platformApiKey = envKey;
-      localStorage.setItem('rook-settings', JSON.stringify(s));
-      api.send?.({ type: 'update_config', id: uid(), base_url: '', api_key: '', model: s.model || '', platform_url: PLATFORM_URL, platform_api_key: envKey });
-      dismissOnboarding();
-    }
-  }
-  if (!s.platformApiKey) return;
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 8000);
-  try {
-    const r = await fetch(`${PLATFORM_URL}/api/platform/me`, {
-      headers: { 'Authorization': `Bearer ${s.platformApiKey}` },
-      signal: ctrl.signal,
-    });
-    clearTimeout(timer);
-    if (r.status === 401) { platformSignOut(); return; }
-    if (!r.ok) return;
-    const d = await r.json();
-    s.platformPlan   = d.plan;
-    s.platformModels = d.models;
-    s.platformUser   = d.user;
-    localStorage.setItem('rook-settings', JSON.stringify(s));
-    showPlatformState('connected', d);
-    populatePlatformModels(d.models);
-    updatePlatformStatus(d);
-  } catch (e) {
-    clearTimeout(timer);
-    if (e.name !== 'AbortError') console.warn('Platform refresh failed:', e);
-  }
-}
-
-// ── Platform status pill shown in the main UI ─────────────────────────────────
-function updatePlatformStatus(data) {
-  // Show a small connection indicator in the sidebar / model select area if present
-  const pill = document.getElementById('platform-status-pill');
-  if (!pill) return;
-  if (data) {
-    const used = data.tokens?.used ?? 0;
-    const lim  = data.tokens?.limit;
-    pill.textContent = lim ? `${Math.round(used/1000)}K / ${Math.round(lim/1000)}K tokens` : `${data.plan} plan`;
-    pill.style.display = '';
-  } else {
-    pill.style.display = 'none';
-  }
-}
-
-document.getElementById('btn-platform-signin')?.addEventListener('click', startPlatformSignIn);
-document.getElementById('btn-platform-simulate')?.addEventListener('click', simulatePlatformSignIn);
-document.getElementById('btn-platform-cancel')?.addEventListener('click', () => { stopPolling(); showPlatformState('idle'); });
-document.getElementById('btn-platform-signout')?.addEventListener('click', platformSignOut);
+// platform sign-in removed. Rook is BYO-key, routed straight to the
+// provider the user configured in Settings. the stubs below exist only so
+// any stale callers don't throw.
+function syncPlatformAuthUI() {}
+function refreshPlatformSession() {}
+function updatePlatformStatus() {}
 
 // ════════════════════════════════════════
 function loadSettings() {

@@ -90,6 +90,7 @@ impl GemmaOrchestrator {
             command.stdout(std::process::Stdio::null());
             command.stderr(std::process::Stdio::null());
 
+            crate::os::hide_tokio(&mut command);
             match command.spawn() {
                 Ok(child) => {
                     *guard = Some(child);
