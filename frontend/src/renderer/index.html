@@ -21,6 +21,21 @@
 
 const uid = () => Math.random().toString(36).slice(2, 10);
 
+function shortName(p) {
+  if (!p) return '';
+  const base = p.replace(/\\/g, '/').split('/').pop() || p;
+  return base.length > 28 ? base.slice(0, 14) + '…' + base.slice(-12) : base;
+}
+
+function fileToDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(r.result);
+    r.onerror = reject;
+    r.readAsDataURL(file);
+  });
+}
+
 function relativeTime(ts) {
   if (!ts) return 'now';
   const diff = Date.now() - new Date(ts).getTime();
@@ -499,6 +514,8 @@ function Chat({ onHoverNode, selectedNode, onSelectNode }) {
   const { convTitle, msgs, streaming, sendChat, stopChat, curatedIds, approval, approveTools, mode, setMode } = useBackend();
   const [hoveredChip, setHoveredChip] = React.useState(null);
   const [input, setInput] = React.useState('');
+  const [attachments, setAttachments] = React.useState([]); // {kind:'file'|'image', name, content?, dataUrl?}
+  const [dragHover, setDragHover] = React.useState(false);
   const streamEl = React.useRef(null);
   const taRef    = React.useRef(null);
 
@@ -515,11 +532,32 @@ function Chat({ onHoverNode, selectedNode, onSelectNode }) {
     if (taRef.current) taRef.current.style.height = 'auto';
   };
 
+  // Compose final message: attachments are folded into context blocks the model
+  // can read. Files become <file path="..."> blocks; images are noted with an
+  // [image attached] hint (vision dispatch lives in a future round).
+  const buildPayload = () => {
+    let body = '';
+    for (const a of attachments) {
+      if (a.kind === 'file') {
+        const trunc = a.content.length > 8000
+          ? a.content.slice(0, 8000) + '\n…[truncated, ' + a.content.length + ' chars total]'
+          : a.content;
+        body += `<file path="${a.name}">\n${trunc}\n</file>\n\n`;
+      } else if (a.kind === 'image') {
+        body += `[image attached: ${a.name}, ${Math.round(a.dataUrl.length / 1024)}KB]\n\n`;
+      }
+    }
+    return body + input.trim();
+  };
+
   const send = () => {
     const text = input.trim();
-    if (!text || streaming) return;
-    sendChat(text);
+    if ((!text && attachments.length === 0) || streaming) return;
+    const payload = buildPayload();
+    if (!payload.trim()) return;
+    sendChat(payload);
     setInput('');
+    setAttachments([]);
     resetTaHeight();
   };
 
@@ -535,8 +573,75 @@ function Chat({ onHoverNode, selectedNode, onSelectNode }) {
     el.style.height = Math.min(200, el.scrollHeight) + 'px';
   };
 
+  // ── Drop ingestion ────────────────────────────────────
+  const onDragOver = e => { e.preventDefault(); e.stopPropagation(); setDragHover(true); };
+  const onDragLeave = e => { e.preventDefault(); e.stopPropagation(); setDragHover(false); };
+  const onDrop = async e => {
+    e.preventDefault(); e.stopPropagation();
+    setDragHover(false);
+    const files = Array.from(e.dataTransfer?.files || []);
+    if (files.length === 0) return;
+    const next = [];
+    for (const f of files) {
+      try {
+        if (f.type.startsWith('image/')) {
+          const dataUrl = await fileToDataUrl(f);
+          next.push({ kind: 'image', name: f.name, dataUrl });
+        } else {
+          // try electron's read-by-path first (works for true OS drops),
+          // fall back to FileReader if path is unavailable
+          let content = '';
+          if (f.path && window.rook?.readFileDrop) {
+            try { content = await window.rook.readFileDrop(f.path); }
+            catch (_) {}
+          }
+          if (!content) content = await f.text();
+          next.push({ kind: 'file', name: f.path || f.name, content });
+        }
+      } catch (err) {
+        console.error('attach failed:', err);
+      }
+    }
+    setAttachments(prev => [...prev, ...next]);
+    taRef.current?.focus();
+  };
+
+  // ── Paste handling: images become attachments, text falls through ─────
+  const onPaste = async e => {
+    const items = Array.from(e.clipboardData?.items || []);
+    const imageItem = items.find(it => it.type.startsWith('image/'));
+    if (imageItem) {
+      e.preventDefault();
+      const blob = imageItem.getAsFile();
+      if (blob) {
+        const dataUrl = await fileToDataUrl(blob);
+        setAttachments(prev => [...prev, {
+          kind: 'image',
+          name: blob.name || `pasted-${Date.now()}.png`,
+          dataUrl,
+        }]);
+      }
+    }
+  };
+
+  const removeAttachment = i => setAttachments(prev => prev.filter((_, j) => j !== i));
+
   return (
-    <div className="chat-col-wrap">
+    <div
+      className={`chat-col-wrap${dragHover ? ' is-drop' : ''}`}
+      onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
+    >
+      {dragHover && (
+        <div className="drop-overlay">
+          <div className="drop-overlay-inner">
+            <div className="drop-overlay-mark"/>
+            <div className="drop-overlay-title">drop to attach</div>
+            <div className="drop-overlay-sub">files become context, images stay inline</div>
+          </div>
+        </div>
+      )}
       <section className="chat-stream" ref={streamEl}>
         <div className="chat-stream-inner">
           {msgs.length === 0 && !streaming ? (
@@ -594,12 +699,28 @@ function Chat({ onHoverNode, selectedNode, onSelectNode }) {
       )}
 
       <div className="composer">
+        {attachments.length > 0 && (
+          <div className="composer-attachments">
+            {attachments.map((a, i) => (
+              <div key={i} className={`attach-chip attach-${a.kind}`}>
+                {a.kind === 'image' ? (
+                  <img src={a.dataUrl} alt={a.name} className="attach-thumb"/>
+                ) : (
+                  <span className="attach-icon">▤</span>
+                )}
+                <span className="attach-name" title={a.name}>{shortName(a.name)}</span>
+                <button className="attach-x" onClick={() => removeAttachment(i)} title="remove">×</button>
+              </div>
+            ))}
+          </div>
+        )}
         <textarea
           ref={taRef}
           value={input}
           onChange={e => { setInput(e.target.value); autoResize(e); }}
           onKeyDown={onKeyDown}
-          placeholder="message rook"
+          onPaste={onPaste}
+          placeholder={attachments.length > 0 ? 'add a note (optional), then send' : 'message rook'}
           rows={1}
         />
         <div className="composer-foot">
@@ -611,7 +732,7 @@ function Chat({ onHoverNode, selectedNode, onSelectNode }) {
           <div className="composer-spacer"/>
           {streaming
             ? <button className="btn btn-danger" style={{height:32}} onClick={stopChat}>stop</button>
-            : <button className="composer-send" onClick={send} title="send · Enter" disabled={!input.trim()}>
+            : <button className="composer-send" onClick={send} title="send · Enter" disabled={!input.trim() && attachments.length === 0}>
                 <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
                   <path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
                 </svg>
@@ -1141,20 +1262,167 @@ function TweaksPanel({ open, onClose, tweaks, setTweaks }) {
   );
 }
 
+// ── Cmd+K palette ─────────────────────────────────────────
+//
+// Fuzzy-ish substring search across conversations, memory nodes, pages,
+// and quick actions. Pure frontend. Cmd+K / Ctrl+K opens, Esc closes,
+// arrows navigate, Enter selects.
+
+function Palette({ open, onClose, onPickPage, onPickConv, onPickNode, onNewChat, onToggleTheme }) {
+  const { sessions, graph } = useBackend();
+  const [q, setQ] = React.useState('');
+  const [cursor, setCursor] = React.useState(0);
+  const inputRef = React.useRef(null);
+
+  React.useEffect(() => {
+    if (open) {
+      setQ('');
+      setCursor(0);
+      setTimeout(() => inputRef.current?.focus(), 0);
+    }
+  }, [open]);
+
+  const actions = React.useMemo(() => [
+    { kind: 'action', label: 'New chat',           hint: 'start fresh',     icon: '＋', run: onNewChat },
+    { kind: 'action', label: 'Open Chat',          hint: 'page',            icon: '◌', run: () => onPickPage('chat') },
+    { kind: 'action', label: 'Open Skills',        hint: 'page',            icon: '◌', run: () => onPickPage('skills') },
+    { kind: 'action', label: 'Open Settings',      hint: 'page',            icon: '◌', run: () => onPickPage('settings') },
+    { kind: 'action', label: 'Toggle paper / ink', hint: 'theme',           icon: '◐', run: onToggleTheme },
+  ], [onPickPage, onNewChat, onToggleTheme]);
+
+  const results = React.useMemo(() => {
+    const ql = q.toLowerCase().trim();
+    const out = [];
+    if (!ql) {
+      // Empty query: show actions + recent sessions
+      for (const a of actions) out.push(a);
+      for (const s of sessions.slice(0, 6)) {
+        out.push({ kind: 'session', label: s.title, hint: s.when, icon: '✎', payload: s });
+      }
+      return out;
+    }
+    const score = (s) => {
+      const t = (s || '').toLowerCase();
+      if (!t) return -1;
+      if (t === ql) return 1000;
+      if (t.startsWith(ql)) return 500;
+      const i = t.indexOf(ql);
+      return i >= 0 ? 100 - i : -1;
+    };
+    const candidates = [];
+    for (const a of actions) {
+      const sc = Math.max(score(a.label), score(a.hint));
+      if (sc >= 0) candidates.push({ ...a, _s: sc });
+    }
+    for (const s of sessions) {
+      const sc = score(s.title);
+      if (sc >= 0) candidates.push({
+        kind: 'session', label: s.title, hint: s.when, icon: '✎',
+        payload: s, _s: sc - 5,
+      });
+    }
+    for (const n of graph.nodes) {
+      const sc = score(n.label);
+      if (sc >= 0) candidates.push({
+        kind: 'node', label: n.label, hint: n.t, icon: glyphFor(n.t),
+        payload: n, _s: sc - 10,
+      });
+    }
+    candidates.sort((a, b) => b._s - a._s);
+    for (const c of candidates.slice(0, 30)) out.push(c);
+    return out;
+  }, [q, sessions, graph, actions]);
+
+  React.useEffect(() => { setCursor(0); }, [q]);
+
+  if (!open) return null;
+
+  const pick = (r) => {
+    if (!r) return;
+    if (r.kind === 'action') r.run();
+    else if (r.kind === 'session') onPickConv(r.payload);
+    else if (r.kind === 'node') onPickNode(r.payload.id);
+    onClose();
+  };
+
+  const onKey = (e) => {
+    if (e.key === 'Escape') { e.preventDefault(); onClose(); }
+    else if (e.key === 'ArrowDown') { e.preventDefault(); setCursor(c => Math.min(results.length - 1, c + 1)); }
+    else if (e.key === 'ArrowUp')   { e.preventDefault(); setCursor(c => Math.max(0, c - 1)); }
+    else if (e.key === 'Enter')     { e.preventDefault(); pick(results[cursor]); }
+  };
+
+  return (
+    <div className="palette-shroud" onMouseDown={onClose}>
+      <div className="palette" onMouseDown={e => e.stopPropagation()}>
+        <div className="palette-input-wrap">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <circle cx="7" cy="7" r="4.5" stroke="currentColor" strokeWidth="1.4"/>
+            <path d="M10.3 10.3L14 14" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+          </svg>
+          <input
+            ref={inputRef}
+            value={q}
+            onChange={e => setQ(e.target.value)}
+            onKeyDown={onKey}
+            placeholder="search conversations, memory, actions…"
+          />
+          <span className="palette-kbd mono">esc</span>
+        </div>
+        <div className="palette-list">
+          {results.length === 0 ? (
+            <div className="palette-empty">no matches</div>
+          ) : results.map((r, i) => (
+            <div
+              key={i}
+              className={`palette-row ${i === cursor ? 'is-active' : ''} kind-${r.kind}`}
+              onMouseEnter={() => setCursor(i)}
+              onMouseDown={(e) => { e.preventDefault(); pick(r); }}
+            >
+              <span className="palette-row-icon">{r.icon}</span>
+              <span className="palette-row-label">{r.label}</span>
+              {r.hint && <span className="palette-row-hint">{r.hint}</span>}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function glyphFor(t) {
+  return ({ person:'●', place:'◆', thing:'■', fact:'＋', project:'⬡', skill:'▲' })[t] || '·';
+}
+
 // ── App shell ─────────────────────────────────────────────
 
 function App() {
   const [page, setPage] = React.useState(() => localStorage.getItem('rook:page') || 'chat');
   const [tweaks, setTweaks]     = useTweaks();
   const [tweaksOpen, setTweaksOpen] = React.useState(false);
+  const [paletteOpen, setPaletteOpen] = React.useState(false);
   const [hoveredNode, setHoveredNode] = React.useState(null);
   const [selectedNode, setSelectedNode] = React.useState(null);
-  const { pipeOk, version, graph, sessions, newConversation } = useBackend();
+  const { pipeOk, version, graph, sessions, newConversation, loadConversation } = useBackend();
 
   React.useEffect(() => { localStorage.setItem('rook:page', page); }, [page]);
 
-  // edit-mode postMessage handshake is for the design preview sandbox only.
-  // in electron, ignore it — tweaks open on click.
+  // Cmd/Ctrl + K opens the palette. Esc inside the palette closes it.
+  React.useEffect(() => {
+    const onKey = (e) => {
+      const meta = e.metaKey || e.ctrlKey;
+      if (meta && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setPaletteOpen(o => !o);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  const toggleTheme = () => {
+    setTweaks(t => ({ ...t, theme: t.theme === 'paper' ? 'ink' : 'paper' }));
+  };
 
   const nav = [
     { k: 'chat',     label: 'Chat'     },
@@ -1189,6 +1457,12 @@ function App() {
             {pipeOk
               ? <span className="pill is-signal"><span className="pill-dot"/>live</span>
               : <span className="pill" style={{color:'var(--ink-4)'}}>disconnected</span>}
+            <button className="iconpill" title="search · ⌘K" onClick={() => setPaletteOpen(true)}>
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                <circle cx="7" cy="7" r="4.5" stroke="currentColor" strokeWidth="1.4"/>
+                <path d="M10.3 10.3L14 14" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+              </svg>
+            </button>
             <button className="iconpill" title="tweaks" onClick={() => setTweaksOpen(o => !o)}>
               <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
                 <circle cx="8" cy="8" r="1.5" fill="currentColor"/>
@@ -1231,6 +1505,16 @@ function App() {
         onClose={() => setTweaksOpen(false)}
         tweaks={tweaks}
         setTweaks={setTweaks}
+      />
+
+      <Palette
+        open={paletteOpen}
+        onClose={() => setPaletteOpen(false)}
+        onPickPage={(p) => setPage(p)}
+        onPickConv={(s) => { loadConversation(s.id, s.title); setPage('chat'); }}
+        onPickNode={(id) => { setSelectedNode(id); setPage('chat'); }}
+        onNewChat={() => { newConversation(); setPage('chat'); }}
+        onToggleTheme={toggleTheme}
       />
     </div>
   );
