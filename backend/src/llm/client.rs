@@ -632,6 +632,8 @@ impl LLMClient {
 // Embedding LRU cache
 //
 // Cheap FIFO-style LRU. Keyed by (provider, model, blake-ish hash of content).
+// It's not a perfect LRU. It's a "least recently inserted" with a big enough
+// bucket that nobody's noticed yet. shhh.
 // Bounded to 4096 entries (~4096 × 768 × 4B ≈ 12MB) so it won't grow unbounded.
 // Massive speedup for repeat queries, re-embeds during write dedup, re-ranks
 // after vector search, and the periodic UI indexer - all hit the cache.

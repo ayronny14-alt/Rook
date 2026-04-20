@@ -160,6 +160,8 @@ fn parse_edge(row: &rusqlite::Row<'_>) -> rusqlite::Result<Edge> {
 }
 
 /// Hard cap on graph nodes. Above this threshold, eviction runs automatically.
+/// Ten thousand is plenty. if you have more facts about your life than that
+/// you should probably write a memoir instead of running this.
 const NODE_LIMIT: i64 = 10_000;
 /// How many extra nodes to evict per pass (keeps eviction infrequent).
 const EVICT_BATCH: i64 = 500;

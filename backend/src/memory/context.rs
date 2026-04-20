@@ -456,7 +456,8 @@ fn relation_weight(relationship: &Relationship) -> f32 {
 
 /// Ebbinghaus forgetting curve: `e^(-age / stability)`.
 /// Stability grows with access_count so frequently-retrieved nodes stay fresh
-/// longer - a node accessed 10× has twice the half-life of an unread one.
+/// longer - a node accessed 10x has twice the half-life of an unread one.
+/// Yes this is the same curve your 9am Spanish class forgot you with.
 fn recency_score(updated_at: i64, now: i64, access_count: i64) -> f32 {
     let age_seconds = (now - updated_at).max(0) as f32;
     let age_days = age_seconds / 86_400.0;
