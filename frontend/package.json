@@ -1,6 +1,6 @@
 {
   "name": "rook",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "description": "Rook AI Assistant - Electron frontend",
   "main": "src/main.js",
   "scripts": {
@@ -27,7 +27,7 @@
   "build": {
     "appId": "com.svrn.rook",
     "productName": "Rook",
-    "copyright": "Copyright © 2025",
+    "copyright": "Copyright \u00c2\u00a9 2025",
     "beforeBuild": "scripts/verify-backend.js",
     "files": [
       "**/*",
