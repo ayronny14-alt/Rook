@@ -629,7 +629,7 @@ impl LLMClient {
     }
 }
 
-// Embedding LRU cache 
+// Embedding LRU cache
 //
 // Cheap FIFO-style LRU. Keyed by (provider, model, blake-ish hash of content).
 // Bounded to 4096 entries (~4096 × 768 × 4B ≈ 12MB) so it won't grow unbounded.

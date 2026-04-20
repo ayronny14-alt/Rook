@@ -427,7 +427,7 @@ impl FileIndexer {
         object_memory.tags = Self::generate_tags(path, &mime_type, &file_type, &fingerprint);
         object_store.upsert(&node.id, &object_memory)?;
 
- // Embed the File node summary 
+        // Embed the File node summary
         embedding_store.delete_embeddings_for_node(&node.id)?;
         let summary_text = format!("{}\n{}", metadata_summary, structural_summary);
         let summary_vector = Self::embed(&summary_text, llm).await;
@@ -448,10 +448,10 @@ impl FileIndexer {
                 Some(&content_excerpt),
             )?;
 
- // Delete stale FileChunk nodes that belonged to this File 
+            // Delete stale FileChunk nodes that belonged to this File
             Self::delete_file_chunks(memory, &node.id)?;
 
- // Create a FileChunk node for each chunk (with neural embeddings) 
+            // Create a FileChunk node for each chunk (with neural embeddings)
             let path_str = path.to_string_lossy().to_string();
             for (chunk_idx, chunk) in chunk_fingerprints
                 .iter()

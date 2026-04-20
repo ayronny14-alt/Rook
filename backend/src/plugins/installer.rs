@@ -43,7 +43,7 @@ pub async fn install_plugin(plugin: &Plugin, registry: &PluginRegistry) -> Resul
         .await
         .context("create plugins dir")?;
 
- // 1. git clone / pull 
+    // 1. git clone / pull
     let clone_url = format!("https://github.com/{}/{}.git", plugin.owner, plugin.repo);
     if install_dir.join(".git").exists() {
         info!("[install] pulling {}", clone_url);
@@ -72,7 +72,7 @@ pub async fn install_plugin(plugin: &Plugin, registry: &PluginRegistry) -> Resul
         }
     }
 
- // 1b. Manifest verification 
+    // 1b. Manifest verification
     // If the repo ships a `rook.json` manifest, validate it. If no manifest
     // exists we warn but allow the install - most community plugins predate the
     // spec. A missing manifest is a yellow flag, not a hard block.
@@ -112,7 +112,7 @@ pub async fn install_plugin(plugin: &Plugin, registry: &PluginRegistry) -> Resul
         );
     }
 
- // 2. Detect entry point + write mcp.json 
+    // 2. Detect entry point + write mcp.json
     // npx / uvx handle dependencies on first invocation so we skip npm/pip install.
     let mcp = detect_mcp_config(&install_dir, &plugin.id).await;
     let entry_point = mcp.as_ref().map(|(ep, _)| ep.as_str());
@@ -125,7 +125,7 @@ pub async fn install_plugin(plugin: &Plugin, registry: &PluginRegistry) -> Resul
         }
     }
 
- // 3. Register 
+    // 3. Register
     let path_str = install_dir.to_string_lossy().into_owned();
     registry.set_installed(&plugin.id, &path_str, entry_point)?;
     info!("[install] done id={} path={}", plugin.id, path_str);
@@ -149,7 +149,7 @@ pub async fn uninstall_plugin(plugin: &Plugin, registry: &PluginRegistry) -> Res
     Ok(())
 }
 
-// Helpers 
+// Helpers
 
 pub(crate) async fn run_cmd_test(program: &str, args: &[&str], cwd: &Path) -> Result<String> {
     run_command(program, args, cwd).await

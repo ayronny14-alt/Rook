@@ -32,7 +32,7 @@ fn load_persisted_config() -> Option<llm::types::LLMConfig> {
 
 #[tokio::main]
 async fn main() -> Result<()> {
- // Log file: %LOCALAPPDATA%\Rook\rook.log 
+    // Log file: %LOCALAPPDATA%\Rook\rook.log
     let log_dir = dirs::data_local_dir()
         .unwrap_or_else(|| std::path::PathBuf::from("."))
         .join("Rook");
@@ -68,7 +68,7 @@ async fn main() -> Result<()> {
     let memory_system = memory::storage::MemoryStorage::new()?;
     info!("Memory system initialized");
 
- // Phase 0 honesty: report the real state of the GNN pipeline at boot 
+    // Phase 0 honesty: report the real state of the GNN pipeline at boot
     // The graph-aware ranker silently falls back to lexical+raw embeddings when
     // the Python trainer can't run. Logging this once per boot makes the
     // failure mode visible instead of pretending GraphSAGE is always on.

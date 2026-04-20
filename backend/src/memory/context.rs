@@ -190,7 +190,7 @@ impl ContextCurator {
                 + (self.weights.recency * recency_score)
                 + (self.weights.confidence * blended_confidence);
 
- // Phase 2.3: apply feedback as a visible multiplicative modifier
+            // Phase 2.3: apply feedback as a visible multiplicative modifier
             let feedback_multiplier = (1.0 + 0.30 * feedback_adjustment).clamp(0.2, 1.5);
             let total_score = base_score * feedback_multiplier;
 
@@ -218,7 +218,7 @@ impl ContextCurator {
             });
         }
 
- // GNN cluster-label boost
+        // GNN cluster-label boost
         if !ranked.is_empty() {
             ranked.sort_by(|a, b| {
                 b.node
@@ -258,7 +258,7 @@ impl ContextCurator {
             }
         }
 
- // MMR (Maximal Marginal Relevance) selection
+        // MMR (Maximal Marginal Relevance) selection
         const MMR_LAMBDA: f32 = 0.7;
         ranked.sort_by(|a, b| {
             b.node

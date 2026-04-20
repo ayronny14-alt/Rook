@@ -71,18 +71,110 @@ pub struct Extracted {
 // match. Keep them out of the entity stream.
 static STOPWORDS: Lazy<HashSet<&'static str>, fn() -> HashSet<&'static str>> = Lazy::new(|| {
     [
-        "I", "I'm", "I've", "I'll", "I'd", "You", "We", "They", "He", "She", "It", "The",
-        "A", "An", "And", "Or", "But", "So", "If", "Then", "That", "This", "These", "Those",
-        "My", "Your", "His", "Her", "Our", "Their", "Its", "Me", "Us", "Them", "Him",
-        "Yes", "No", "Ok", "Okay", "Sure", "Maybe", "Please", "Thanks", "Thank",
-        "What", "Why", "How", "When", "Where", "Who", "Which",
-        "Today", "Tomorrow", "Yesterday", "Now", "Later", "Soon", "Never", "Always",
-        "Can", "Could", "Would", "Should", "Will", "Shall", "May", "Might", "Must",
-        "Do", "Does", "Did", "Have", "Has", "Had", "Be", "Been", "Being", "Is", "Are", "Was", "Were",
-        "Hello", "Hi", "Hey", "Bye",
-        "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday",
-        "January", "February", "March", "April", "May", "June", "July", "August",
-        "September", "October", "November", "December",
+        "I",
+        "I'm",
+        "I've",
+        "I'll",
+        "I'd",
+        "You",
+        "We",
+        "They",
+        "He",
+        "She",
+        "It",
+        "The",
+        "A",
+        "An",
+        "And",
+        "Or",
+        "But",
+        "So",
+        "If",
+        "Then",
+        "That",
+        "This",
+        "These",
+        "Those",
+        "My",
+        "Your",
+        "His",
+        "Her",
+        "Our",
+        "Their",
+        "Its",
+        "Me",
+        "Us",
+        "Them",
+        "Him",
+        "Yes",
+        "No",
+        "Ok",
+        "Okay",
+        "Sure",
+        "Maybe",
+        "Please",
+        "Thanks",
+        "Thank",
+        "What",
+        "Why",
+        "How",
+        "When",
+        "Where",
+        "Who",
+        "Which",
+        "Today",
+        "Tomorrow",
+        "Yesterday",
+        "Now",
+        "Later",
+        "Soon",
+        "Never",
+        "Always",
+        "Can",
+        "Could",
+        "Would",
+        "Should",
+        "Will",
+        "Shall",
+        "May",
+        "Might",
+        "Must",
+        "Do",
+        "Does",
+        "Did",
+        "Have",
+        "Has",
+        "Had",
+        "Be",
+        "Been",
+        "Being",
+        "Is",
+        "Are",
+        "Was",
+        "Were",
+        "Hello",
+        "Hi",
+        "Hey",
+        "Bye",
+        "Monday",
+        "Tuesday",
+        "Wednesday",
+        "Thursday",
+        "Friday",
+        "Saturday",
+        "Sunday",
+        "January",
+        "February",
+        "March",
+        "April",
+        "May",
+        "June",
+        "July",
+        "August",
+        "September",
+        "October",
+        "November",
+        "December",
     ]
     .into_iter()
     .collect()
@@ -91,20 +183,98 @@ static STOPWORDS: Lazy<HashSet<&'static str>, fn() -> HashSet<&'static str>> = L
 // Hardcoded lexicon of tools/tech we recognize on sight. Extend freely.
 static TOOL_LEXICON: Lazy<HashSet<&'static str>, fn() -> HashSet<&'static str>> = Lazy::new(|| {
     [
-        "rust", "cargo", "tokio", "electron", "react", "vue", "svelte", "angular",
-        "node", "npm", "pnpm", "yarn", "bun", "deno", "typescript", "javascript",
-        "python", "pip", "poetry", "uv", "conda", "django", "flask", "fastapi",
-        "go", "golang", "java", "kotlin", "swift", "c++", "c#", "ruby", "rails",
-        "postgres", "postgresql", "sqlite", "mysql", "redis", "mongodb", "dynamodb",
-        "kafka", "rabbitmq", "nats",
-        "docker", "kubernetes", "k8s", "terraform", "ansible", "helm",
-        "aws", "gcp", "azure", "vercel", "netlify", "cloudflare", "fly.io",
-        "git", "github", "gitlab", "bitbucket",
-        "vscode", "vim", "neovim", "emacs", "sublime", "jetbrains", "intellij", "webstorm", "cursor",
-        "windows", "macos", "linux", "ubuntu", "debian", "arch", "fedora",
-        "slack", "discord", "notion", "linear", "jira", "figma",
-        "openai", "anthropic", "ollama", "huggingface",
-        "sqlite", "rusqlite", "serde", "clap", "axum", "actix",
+        "rust",
+        "cargo",
+        "tokio",
+        "electron",
+        "react",
+        "vue",
+        "svelte",
+        "angular",
+        "node",
+        "npm",
+        "pnpm",
+        "yarn",
+        "bun",
+        "deno",
+        "typescript",
+        "javascript",
+        "python",
+        "pip",
+        "poetry",
+        "uv",
+        "conda",
+        "django",
+        "flask",
+        "fastapi",
+        "go",
+        "golang",
+        "java",
+        "kotlin",
+        "swift",
+        "c++",
+        "c#",
+        "ruby",
+        "rails",
+        "postgres",
+        "postgresql",
+        "sqlite",
+        "mysql",
+        "redis",
+        "mongodb",
+        "dynamodb",
+        "kafka",
+        "rabbitmq",
+        "nats",
+        "docker",
+        "kubernetes",
+        "k8s",
+        "terraform",
+        "ansible",
+        "helm",
+        "aws",
+        "gcp",
+        "azure",
+        "vercel",
+        "netlify",
+        "cloudflare",
+        "fly.io",
+        "git",
+        "github",
+        "gitlab",
+        "bitbucket",
+        "vscode",
+        "vim",
+        "neovim",
+        "emacs",
+        "sublime",
+        "jetbrains",
+        "intellij",
+        "webstorm",
+        "cursor",
+        "windows",
+        "macos",
+        "linux",
+        "ubuntu",
+        "debian",
+        "arch",
+        "fedora",
+        "slack",
+        "discord",
+        "notion",
+        "linear",
+        "jira",
+        "figma",
+        "openai",
+        "anthropic",
+        "ollama",
+        "huggingface",
+        "sqlite",
+        "rusqlite",
+        "serde",
+        "clap",
+        "axum",
+        "actix",
     ]
     .into_iter()
     .collect()
@@ -139,16 +309,46 @@ static SELF_PATTERNS: Lazy<Vec<IdPattern>, fn() -> Vec<IdPattern>> = Lazy::new(|
     // (?i) on the lead-in, (?-i:...) on the capture so we keep proper-case
     // detection working (otherwise "aaron fricker and i work" all match).
     let raw: &[(&str, &str)] = &[
-        ("name", r"(?i)\b(?:my\s+name\s+is|i'?m\s+called|call\s+me|i\s+am)\s+(?-i:([A-Z][A-Za-z'-]{1,30}(?:\s+[A-Z][A-Za-z'-]{1,30}){0,2}))"),
-        ("name", r"(?i)^\s*i'?m\s+(?-i:([A-Z][A-Za-z'-]{1,30}(?:\s+[A-Z][A-Za-z'-]{1,30})?))\b"),
-        ("company", r"(?i)\bi\s+(?:work|am)\s+(?:at|for)\s+(?-i:([A-Z][\w&.'-]{1,40}(?:\s+[A-Z][\w&.'-]{1,40}){0,3}))"),
-        ("location", r"(?i)\bi\s+(?:live|am|work)\s+in\s+(?-i:([A-Z][A-Za-z.'-]{1,40}(?:,?\s+[A-Z][A-Za-z.'-]{1,40}){0,2}))"),
-        ("location", r"(?i)\bi'?m\s+from\s+(?-i:([A-Z][A-Za-z.'-]{1,40}(?:,?\s+[A-Z][A-Za-z.'-]{1,40}){0,2}))"),
-        ("role", r"(?i)\bi'?m\s+a\s+([a-z][a-z\s-]{3,40}?)(?:\s+(?:at|for|who|and|\.|,))"),
-        ("editor", r"(?i)\bi\s+use\s+(vscode|vim|neovim|emacs|sublime|jetbrains|intellij|webstorm|cursor)\b"),
-        ("os", r"(?i)\bi'?m\s+on\s+(windows|macos|mac|linux|ubuntu|debian|arch|fedora)\b"),
-        ("language_primary", r"(?i)\bi\s+(?:mostly\s+)?(?:code|write|program)\s+(?:in|with)\s+([a-z+#]+)\b"),
-        ("timezone", r"\b(UTC[+\-]\d{1,2}|[A-Z]{2,4}T|Pacific|Eastern|Central|Mountain|GMT)\b"),
+        (
+            "name",
+            r"(?i)\b(?:my\s+name\s+is|i'?m\s+called|call\s+me|i\s+am)\s+(?-i:([A-Z][A-Za-z'-]{1,30}(?:\s+[A-Z][A-Za-z'-]{1,30}){0,2}))",
+        ),
+        (
+            "name",
+            r"(?i)^\s*i'?m\s+(?-i:([A-Z][A-Za-z'-]{1,30}(?:\s+[A-Z][A-Za-z'-]{1,30})?))\b",
+        ),
+        (
+            "company",
+            r"(?i)\bi\s+(?:work|am)\s+(?:at|for)\s+(?-i:([A-Z][\w&.'-]{1,40}(?:\s+[A-Z][\w&.'-]{1,40}){0,3}))",
+        ),
+        (
+            "location",
+            r"(?i)\bi\s+(?:live|am|work)\s+in\s+(?-i:([A-Z][A-Za-z.'-]{1,40}(?:,?\s+[A-Z][A-Za-z.'-]{1,40}){0,2}))",
+        ),
+        (
+            "location",
+            r"(?i)\bi'?m\s+from\s+(?-i:([A-Z][A-Za-z.'-]{1,40}(?:,?\s+[A-Z][A-Za-z.'-]{1,40}){0,2}))",
+        ),
+        (
+            "role",
+            r"(?i)\bi'?m\s+a\s+([a-z][a-z\s-]{3,40}?)(?:\s+(?:at|for|who|and|\.|,))",
+        ),
+        (
+            "editor",
+            r"(?i)\bi\s+use\s+(vscode|vim|neovim|emacs|sublime|jetbrains|intellij|webstorm|cursor)\b",
+        ),
+        (
+            "os",
+            r"(?i)\bi'?m\s+on\s+(windows|macos|mac|linux|ubuntu|debian|arch|fedora)\b",
+        ),
+        (
+            "language_primary",
+            r"(?i)\bi\s+(?:mostly\s+)?(?:code|write|program)\s+(?:in|with)\s+([a-z+#]+)\b",
+        ),
+        (
+            "timezone",
+            r"\b(UTC[+\-]\d{1,2}|[A-Z]{2,4}T|Pacific|Eastern|Central|Mountain|GMT)\b",
+        ),
     ];
     raw.iter()
         .filter_map(|(k, r)| Regex::new(r).ok().map(|re| IdPattern { key: k, re }))
@@ -173,7 +373,11 @@ pub fn extract(text: &str) -> Extracted {
     for p in SELF_PATTERNS.iter() {
         if let Some(c) = p.re.captures(text) {
             if let Some(m) = c.get(1) {
-                let mut v = m.as_str().trim().trim_end_matches(['.', ',', '!', '?']).to_string();
+                let mut v = m
+                    .as_str()
+                    .trim()
+                    .trim_end_matches(['.', ',', '!', '?'])
+                    .to_string();
                 // tool-ish keys are conventionally lowercase
                 if matches!(p.key, "editor" | "os" | "language_primary") {
                     v = v.to_ascii_lowercase();
@@ -372,7 +576,10 @@ mod tests {
     #[test]
     fn extracts_name_and_company() {
         let ex = extract("Hey, my name is Aaron Fricker and I work at Anthropic.");
-        assert_eq!(ex.user_facts.get("name").map(String::as_str), Some("Aaron Fricker"));
+        assert_eq!(
+            ex.user_facts.get("name").map(String::as_str),
+            Some("Aaron Fricker")
+        );
         assert!(ex.user_facts.get("company").is_some());
     }
 
@@ -380,8 +587,14 @@ mod tests {
     fn extracts_tools_and_location() {
         let ex = extract("I'm on Windows and I use vscode. I live in Seattle.");
         assert_eq!(ex.user_facts.get("os").map(String::as_str), Some("windows"));
-        assert_eq!(ex.user_facts.get("editor").map(String::as_str), Some("vscode"));
-        assert!(ex.entities.iter().any(|(_, k)| matches!(k, EntityKind::Tool)));
+        assert_eq!(
+            ex.user_facts.get("editor").map(String::as_str),
+            Some("vscode")
+        );
+        assert!(ex
+            .entities
+            .iter()
+            .any(|(_, k)| matches!(k, EntityKind::Tool)));
     }
 
     #[test]
@@ -403,7 +616,13 @@ mod tests {
     #[test]
     fn captures_repo_and_url() {
         let ex = extract("check ayronny14-alt/Rook and https://github.com/foo/bar");
-        assert!(ex.entities.iter().any(|(_, k)| matches!(k, EntityKind::Url)));
-        assert!(ex.entities.iter().any(|(_, k)| matches!(k, EntityKind::Project)));
+        assert!(ex
+            .entities
+            .iter()
+            .any(|(_, k)| matches!(k, EntityKind::Url)));
+        assert!(ex
+            .entities
+            .iter()
+            .any(|(_, k)| matches!(k, EntityKind::Project)));
     }
 }
