@@ -94,8 +94,8 @@ button { cursor: pointer; }
 .signal { color: var(--signal-ink); }
 
 /* App */
-.app { display: grid; grid-template-rows: 1fr; height: 100%; min-height: 0; }
-.main-pane { min-width: 0; min-height: 0; position: relative; overflow: hidden; background: var(--bg); }
+.app { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+.main-pane { flex: 1; min-width: 0; min-height: 0; position: relative; overflow: hidden; background: var(--bg); }
 
 /* Topbar */
 .topbar {
@@ -1166,3 +1166,67 @@ button { cursor: pointer; }
 }
 .mode-switch button:hover .mode-hotkey,
 .mode-switch button.is-active .mode-hotkey { opacity: 1; }
+
+/* Update banner: quiet strip above the topbar. appears only when there's
+   something to say. no pink, no bounce. */
+.update-banner {
+  position: relative;
+  display: flex; align-items: center; gap: 10px;
+  padding: 6px 14px 6px 12px;
+  background: color-mix(in oklab, var(--signal) 8%, var(--bg-soft));
+  border-bottom: 1px solid color-mix(in oklab, var(--signal) 22%, var(--line-2));
+  font-size: 11.5px;
+  color: var(--ink);
+  -webkit-app-region: no-drag;
+  z-index: 30;
+  animation: update-banner-in 280ms var(--ease-out) both;
+}
+@keyframes update-banner-in {
+  from { transform: translateY(-100%); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
+.update-banner-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--signal);
+  box-shadow: 0 0 8px color-mix(in oklab, var(--signal) 60%, transparent);
+  flex-shrink: 0;
+}
+.update-banner-label {
+  font-family: var(--fs-sans);
+  letter-spacing: -0.005em;
+  color: var(--ink-2);
+}
+.update-banner-sp { flex: 1; }
+.update-banner-track {
+  flex: 0 0 160px;
+  height: 3px; border-radius: 999px;
+  background: var(--bg-soft);
+  overflow: hidden;
+}
+.update-banner-fill {
+  height: 100%; background: var(--signal);
+  transition: width 200ms linear;
+}
+.update-banner-action {
+  font-family: var(--fs-mono); font-size: 10px;
+  letter-spacing: 0.08em; text-transform: uppercase;
+  padding: 3px 10px; border-radius: 999px;
+  color: var(--bg); background: var(--ink);
+  transition: background var(--dur) var(--ease);
+}
+.update-banner-action:hover { background: var(--ink-2); }
+.update-banner-x {
+  width: 18px; height: 18px; border-radius: 50%;
+  color: var(--ink-4); font-size: 14px; line-height: 1;
+  display: inline-flex; align-items: center; justify-content: center;
+  transition: all var(--dur) var(--ease);
+}
+.update-banner-x:hover { background: var(--bg-soft); color: var(--ink); }
+
+.update-banner-downloading { background: color-mix(in oklab, var(--signal) 5%, var(--bg-soft)); }
+.update-banner-ready       { background: color-mix(in oklab, var(--signal) 14%, var(--bg-soft)); }
+.update-banner-error {
+  background: rgba(198,68,68,0.08);
+  border-bottom-color: rgba(198,68,68,0.3);
+}
+.update-banner-error .update-banner-dot { background: #c64444; box-shadow: 0 0 8px rgba(198,68,68,0.4); }

@@ -243,6 +243,36 @@ function BackendProvider({ children }) {
   const convIdRef     = React.useRef(null);
   const activeModelRef = React.useRef(null);
 
+  // updater wiring. main.js emits 'update-state' whenever electron-updater
+  // changes state (checking / available / downloading / ready). we also do
+  // a one-shot kick on mount so the banner reflects the latest poll.
+  const [update, setUpdate] = React.useState(null);
+  const [updateDismissed, setUpdateDismissed] = React.useState(() => {
+    try {
+      const raw = JSON.parse(localStorage.getItem('rook:update-dismissed') || 'null');
+      if (raw && raw.until && Date.now() < raw.until) return raw.version || null;
+    } catch (_) {}
+    return null;
+  });
+  React.useEffect(() => {
+    if (!window.rook) return;
+    window.rook.getUpdateState?.().then(s => s && setUpdate(s)).catch(() => {});
+    window.rook.checkForUpdates?.().then(s => s && setUpdate(s)).catch(() => {});
+    const unsub = window.rook.onUpdateState?.(s => setUpdate(s));
+    return () => { try { unsub && unsub(); } catch (_) {} };
+  }, []);
+  const dismissUpdate = (version) => {
+    // 24h cooldown so the banner does not nag for the same release.
+    try {
+      localStorage.setItem('rook:update-dismissed', JSON.stringify({
+        version,
+        until: Date.now() + 24 * 60 * 60 * 1000,
+      }));
+    } catch (_) {}
+    setUpdateDismissed(version);
+  };
+  const startUpdate = () => window.rook?.startUpdate?.();
+
   // keep refs in sync so closures in onMessage see current values
   React.useEffect(() => { convIdRef.current = convId; }, [convId]);
   React.useEffect(() => { activeModelRef.current = providers.active?.model || null; }, [providers.active?.model]);
@@ -496,6 +526,7 @@ function BackendProvider({ children }) {
     convId, convTitle, msgs, streaming, mode, setMode, approval,
     sendChat, stopChat, newConversation, loadConversation, approveTools, saveSettings,
     providers,
+    update, updateDismissed, dismissUpdate, startUpdate,
   };
 
   return <BackendCtx.Provider value={ctx}>{children}</BackendCtx.Provider>;
@@ -1990,6 +2021,60 @@ function glyphFor(t) {
   return ({ person:'●', place:'◆', thing:'■', fact:'＋', project:'⬡', skill:'▲' })[t] || '·';
 }
 
+// Update banner. Electron-updater tells us what's going on via update-state;
+// we surface it as a small unobtrusive strip at the top of the window.
+// States we care about: available, downloading, ready. Dismiss sleeps it
+// for 24h per-version so you stop seeing it for the same release.
+function UpdateBanner() {
+  const { update, updateDismissed, dismissUpdate, startUpdate } = useBackend();
+  if (!update) return null;
+  const { status, updateAvailable, latestVersion, progress, error, currentVersion } = update;
+  // only show states worth a banner
+  const showable = updateAvailable && ['available','downloading','ready','error'].includes(status);
+  if (!showable) return null;
+  if (updateDismissed && updateDismissed === latestVersion && status !== 'ready') return null;
+
+  const pct = progress?.percent || 0;
+
+  let label, actionLabel, action;
+  if (status === 'available') {
+    label = `v${latestVersion} is out. you're on ${currentVersion}.`;
+    actionLabel = 'download';
+    action = startUpdate;
+  } else if (status === 'downloading') {
+    label = `pulling v${latestVersion}`;
+    actionLabel = `${pct}%`;
+    action = null;
+  } else if (status === 'ready') {
+    label = `v${latestVersion} installed. restart to use it.`;
+    actionLabel = 'restart';
+    action = startUpdate;
+  } else if (status === 'error') {
+    label = `update failed: ${error || 'unknown'}`;
+    actionLabel = 'retry';
+    action = startUpdate;
+  }
+
+  return (
+    <div className={`update-banner update-banner-${status}`}>
+      <span className="update-banner-dot"/>
+      <span className="update-banner-label">{label}</span>
+      {status === 'downloading' && (
+        <div className="update-banner-track">
+          <div className="update-banner-fill" style={{ width: `${pct}%` }}/>
+        </div>
+      )}
+      <span className="update-banner-sp"/>
+      {action && (
+        <button className="update-banner-action" onClick={action}>{actionLabel}</button>
+      )}
+      {status !== 'downloading' && (
+        <button className="update-banner-x" onClick={() => dismissUpdate(latestVersion)} title="dismiss for 24h">×</button>
+      )}
+    </div>
+  );
+}
+
 // App shell 
 
 function App() {
@@ -2028,6 +2113,7 @@ function App() {
 
   return (
     <div className="app">
+      <UpdateBanner/>
       <div className="main-pane">
         <header className="topbar">
           <div className="topbar-left">
