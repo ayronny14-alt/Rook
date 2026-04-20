@@ -58,7 +58,7 @@ impl MemoryFeedbackStore {
         reason: Option<&str>,
         source: Option<&str>,
         // Conversation / session id for dedup.  When provided, any previous vote
-        // from this session for the same node is removed before inserting — so
+        // from this session for the same node is removed before inserting - so
         // changing your mind from 👍 to 👎 during a session doesn't double-count.
         user_session: Option<&str>,
     ) -> Result<MemoryFeedback> {
@@ -124,7 +124,7 @@ impl MemoryFeedbackStore {
 
         // Fetch all votes with their ages and apply exponential time-decay so
         // old feedback fades rather than locking a node's score forever.
-        // Half-life: 30 days — a vote from 30 days ago counts half as much as
+        // Half-life: 30 days - a vote from 30 days ago counts half as much as
         // a vote from today. A 90-day-old vote is down to ~12%.
         const HALF_LIFE_SECS: f64 = 30.0 * 86_400.0;
 

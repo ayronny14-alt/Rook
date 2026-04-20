@@ -191,7 +191,7 @@ impl GraphMemory {
             [&id, &node_type.to_string(), title, &now.to_string(), &now.to_string(), &metadata_json],
         )?;
 
-        // Best-effort eviction — never fails the insert.
+        // Best-effort eviction - never fails the insert.
         self.evict_if_over_limit();
 
         Ok(Node {
@@ -205,8 +205,8 @@ impl GraphMemory {
     }
 
     /// Silently prunes the oldest nodes when the graph exceeds NODE_LIMIT.
-    /// Strategy: remove isolated nodes (no edges) first — they carry no
-    /// relationship context — then fall back to oldest-by-updated_at.
+    /// Strategy: remove isolated nodes (no edges) first - they carry no
+    /// relationship context - then fall back to oldest-by-updated_at.
     /// Edge CASCADE ensures referencing rows are cleaned up automatically.
     fn evict_if_over_limit(&self) {
         let conn = match self.storage.get_connection() {
@@ -224,7 +224,7 @@ impl GraphMemory {
 
         let to_evict = count - NODE_LIMIT + EVICT_BATCH;
 
-        // Pass 1: isolated nodes (no edges) — cheapest to remove.
+        // Pass 1: isolated nodes (no edges) - cheapest to remove.
         // Exclude pinned nodes (user_facts key = 'node_pinned:<id>', value = 'true').
         let _ = conn.execute(
             "DELETE FROM nodes WHERE id IN (
@@ -256,7 +256,7 @@ impl GraphMemory {
             );
         }
 
-        // Reclaim pages freed by the DELETE — incremental_vacuum releases one
+        // Reclaim pages freed by the DELETE - incremental_vacuum releases one
         // free-page batch per call without blocking the connection pool.
         let _ = conn.execute_batch("PRAGMA incremental_vacuum(100);");
     }

@@ -1,7 +1,7 @@
 // per-conversation action log. lets the AI remember what it already clicked,
 // what the prior tree looked like, so subsequent snapshots can be diffed.
 //
-// not persisted across backend restarts on purpose — the accessibility tree
+// not persisted across backend restarts on purpose - the accessibility tree
 // is ephemeral anyway. one restart, one fresh session.
 
 use serde::{Deserialize, Serialize};

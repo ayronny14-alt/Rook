@@ -234,7 +234,7 @@ impl IPCServer {
                 let retry_ms = RATE_WINDOW_MS
                     .saturating_sub(now.duration_since(rate_window_start).as_millis());
                 warn!(
-                    "IPC rate limit exceeded ({} msg/s) — retry in {}ms",
+                    "IPC rate limit exceeded ({} msg/s) - retry in {}ms",
                     rate_count, retry_ms
                 );
                 let id_rl = serde_json::from_str::<serde_json::Value>(trimmed)
@@ -245,7 +245,7 @@ impl IPCServer {
                     .send(IPCResponse::Error {
                         id: id_rl,
                         message: format!(
-                            "Rate limit exceeded ({} msg/s) — retry in {}ms",
+                            "Rate limit exceeded ({} msg/s) - retry in {}ms",
                             RATE_LIMIT, retry_ms
                         ),
                     })
@@ -282,7 +282,7 @@ impl IPCServer {
 
             let id = extract_request_id(&request);
 
-            // Handle cancel inline — must return immediately while dispatch runs
+            // Handle cancel inline - must return immediately while dispatch runs
             if let IPCRequest::CancelRequest { id: cid, target_id } = &request {
                 let token_opt = cancellations
                     .lock()
@@ -308,7 +308,7 @@ impl IPCServer {
                 map.insert(id.clone(), cancel_token.clone());
             } else {
                 warn!(
-                    "cancellations mutex poisoned — request {} will not be cancellable",
+                    "cancellations mutex poisoned - request {} will not be cancellable",
                     id
                 );
             }

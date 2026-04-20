@@ -61,7 +61,7 @@ impl LspSession {
         self.stdin.write_all(body.as_bytes())?;
         self.stdin.flush()?;
 
-        // Read responses — skip notifications, find our response by id
+        // Read responses - skip notifications, find our response by id
         loop {
             // Read headers
             let mut content_length: usize = 0;
@@ -100,7 +100,7 @@ impl LspSession {
                     return Ok(Value::Null);
                 }
             }
-            // Not our response — keep reading
+            // Not our response - keep reading
         }
     }
 
@@ -236,7 +236,7 @@ impl LspManager {
 
         let uri = path_to_uri(file_path);
         if session.opened_files.contains(&uri) {
-            // Already opened — send didChange with fresh content instead
+            // Already opened - send didChange with fresh content instead
             let content = std::fs::read_to_string(file_path)?;
             session.send_notification(
                 "textDocument/didChange",

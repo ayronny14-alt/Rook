@@ -5,7 +5,7 @@
 mod win {
     use std::os::windows::process::CommandExt;
 
-    /// CREATE_NO_WINDOW — prevents a console window from appearing when we
+    /// CREATE_NO_WINDOW - prevents a console window from appearing when we
     /// spawn a console subsystem process from a GUI subsystem process.
     /// Without this, every `std::process::Command::spawn()` call from rook.exe
     /// (which is GUI subsystem) flashes a cmd window for the child.

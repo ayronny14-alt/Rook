@@ -1,4 +1,4 @@
-// ── Utility helpers ───────────────────────────────────────────────────────────
+// Utility helpers 
 
 /** Build a collapsible thinking/reasoning card. */
 export function buildThinkingCard(thinking) {
@@ -115,7 +115,7 @@ function extractToolCalls(text) {
     i = nextPos;
 
     if (isTerr) {
-      // [[TERR:toolname]] — error badge for the immediately preceding tool card
+      // [[TERR:toolname]] - error badge for the immediately preceding tool card
       const match = text.slice(i).match(/^\[\[TERR:([^\]]*)\]\]/);
       if (match) {
         const toolName = match[1];
@@ -124,12 +124,12 @@ function extractToolCalls(text) {
         out += ph;
         i += match[0].length;
       } else {
-        // Incomplete marker (streaming) — leave rest as-is
+        // Incomplete marker (streaming) - leave rest as-is
         out += text.slice(i);
         break;
       }
     } else {
-      // [[TOOL:name:{json}]] — brace-balanced JSON parse
+      // [[TOOL:name:{json}]] - brace-balanced JSON parse
       const nameStart = i + 7; // after '[[TOOL:'
       let nameEnd = nameStart;
       while (nameEnd < text.length && text[nameEnd] !== ':' && text[nameEnd] !== ']') nameEnd++;
@@ -153,7 +153,7 @@ function extractToolCalls(text) {
         else if (c === '}') { depth--; if (depth === 0) { j++; closed = true; break; } }
       }
       if (!closed || text.slice(j, j + 2) !== ']]') {
-        // Incomplete (still streaming) — stop scanning
+        // Incomplete (still streaming) - stop scanning
         out += text.slice(i);
         break;
       }
@@ -170,7 +170,7 @@ function extractToolCalls(text) {
   return { stripped: out, cards };
 }
 
-/** DOMPurify config — allows formatting tags, code blocks, and our custom card elements */
+/** DOMPurify config - allows formatting tags, code blocks, and our custom card elements */
 const PURIFY_CONFIG = {
   ADD_TAGS: ['details', 'summary', 'del', 'blockquote', 'hr', 'table', 'thead', 'tbody', 'tr', 'th', 'td', 'input'],
   ADD_ATTR: ['class', 'title', 'open', 'data-lang', 'data-n', 'target', 'rel', 'href', 'type', 'checked', 'disabled'],
@@ -214,17 +214,17 @@ export function renderMarkdown(text) {
   const { stripped, cards: toolCards } = extractToolCalls(text);
   text = stripped;
 
-  // ── Point 5: esc() runs first — AI text is HTML-escaped before we inject our own tags ──
+ // Point 5: esc() runs first - AI text is HTML-escaped before we inject our own tags 
   let h = esc(text);
 
-  // ── Code blocks: extracted first so inner content is never transformed ───────
+ // Code blocks: extracted first so inner content is never transformed 
   // Point 3: language label uses an icon map instead of raw text
   const LANG_ICON = {
     js: '⬡ JS', javascript: '⬡ JS', ts: '⬡ TS', typescript: '⬡ TS',
     rust: '⚙ RS', rs: '⚙ RS', c: '© C', cpp: '© C++', 'c++': '© C++',
     py: '🐍 PY', python: '🐍 PY', go: '◈ GO', java: '☕ JAVA',
     sh: '$ SH', bash: '$ SH', shell: '$ SH', zsh: '$ ZSH',
-    json: '{ } JSON', yaml: '— YAML', toml: '— TOML',
+    json: '{ } JSON', yaml: '- YAML', toml: '- TOML',
     html: '‹/› HTML', css: '# CSS', sql: '⊞ SQL',
     asm: '⊕ ASM', assembly: '⊕ ASM',
   };
@@ -236,13 +236,13 @@ export function renderMarkdown(text) {
     return `<div class="code-wrap">${label}<pre><code class="${langClass}">${c.trimEnd()}</code></pre><button class="copy-btn" title="Copy code">⎘</button></div>`;
   });
 
-  // ── Inline code ──────────────────────────────────────────────────────────────
+ // Inline code 
   h = h.replace(/`([^`\n]+)`/g, '<code>$1</code>');
 
-  // ── Point 4: Hex/memory address highlighting (outside code blocks) ───────────
+ // Point 4: Hex/memory address highlighting (outside code blocks) 
   h = h.replace(/(0x[0-9a-fA-F]{2,})\b/g, '<span class="hex-addr">$1</span>');
 
-  // ── Inline formatting ────────────────────────────────────────────────────────
+ // Inline formatting 
   h = h.replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>');
   h = h.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
   h = h.replace(/\*(.+?)\*/g, '<em>$1</em>');
@@ -251,7 +251,7 @@ export function renderMarkdown(text) {
   h = h.replace(/\[([^\]]+)\]\((https?:\/\/[^\)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
   h = h.replace(/(?<![="'>])(https?:\/\/[^\s<>"']+)/g, '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>');
 
-  // ── Headings H1–H6 ──────────────────────────────────────────────────────────
+ // Headings H1-H6 
   h = h.replace(/^#{6} (.+)$/gm, '<h6>$1</h6>');
   h = h.replace(/^#{5} (.+)$/gm, '<h5>$1</h5>');
   h = h.replace(/^#{4} (.+)$/gm, '<h4>$1</h4>');
@@ -259,16 +259,16 @@ export function renderMarkdown(text) {
   h = h.replace(/^## (.+)$/gm,   '<h2>$1</h2>');
   h = h.replace(/^# (.+)$/gm,    '<h1>$1</h1>');
 
-  // ── Horizontal rule ─────────────────────────────────────────────────────────
+ // Horizontal rule 
   h = h.replace(/^(?:-{3,}|\*{3,}|_{3,})$/gm, '<hr>');
 
-  // ── Blockquotes — multi-line runs of &gt;-prefixed lines ────────────────────
+ // Blockquotes - multi-line runs of &gt;-prefixed lines 
   h = h.replace(/(^&gt; [^\n]*(\n&gt; [^\n]*)*)/gm, m => {
     const inner = m.replace(/^&gt; /gm, '');
     return `<blockquote>${inner.trim()}</blockquote>`;
   });
 
-  // ── Point 1: Checklist items — processed BEFORE generic list conversion ──────
+ // Point 1: Checklist items - processed BEFORE generic list conversion 
   // [ ] unchecked  →  interactive checkbox li
   // [x] / [X] checked  →  checked checkbox li
   h = h.replace(/^[-*] \[( |x|X)\] (.+)$/gm, (_, state, content) => {
@@ -277,7 +277,7 @@ export function renderMarkdown(text) {
   });
   h = h.replace(/(<li class="chk-item">.*<\/li>(\n)?)+/g, m => `<ul class="chk-list">${m}</ul>`);
 
-  // ── Ordered lists ────────────────────────────────────────────────────────────
+ // Ordered lists 
   // Point 1 fix: use [^\n]+ (single line) instead of [\s\S]*? to prevent cross-list merging
   h = h.replace(/^(\d+)\. ([^\n]+)$/gm, '<li class="ol-item" data-n="$1">$2</li>');
   h = h.replace(/(<li class="ol-item"[^>]*>[^\n]*<\/li>\n?)+/g, m => {
@@ -288,14 +288,14 @@ export function renderMarkdown(text) {
       : list;
   });
 
-  // ── Unordered lists ──────────────────────────────────────────────────────────
+ // Unordered lists 
   // Point 1 fix: [^\n]+ prevents cross-list merging across blank lines
   h = h.replace(/^[-*] ([^\n]+)$/gm, '<li>$1</li>');
   h = h.replace(/(<li>[^\n]*<\/li>\n?)+/g, m => {
     const lines = m.trim().split('\n').filter(l => l.trim());
     const count = lines.length;
 
-    // Point 2: Hybrid KV-Grid — fire if ≥50% of items are Key: Value
+    // Point 2: Hybrid KV-Grid - fire if ≥50% of items are Key: Value
     const kvBoldRe  = /^<li><strong>([^<]+)<\/strong>:\s*(.+)<\/li>$/;
     const kvPlainRe = /^<li>([^:<\n]{1,40}):\s+(.+)<\/li>$/;
     const kvCount = lines.filter(l => kvBoldRe.test(l) || kvPlainRe.test(l)).length;
@@ -316,7 +316,7 @@ export function renderMarkdown(text) {
       : list;
   });
 
-  // ── Tables ───────────────────────────────────────────────────────────────────
+ // Tables 
   h = h.replace(/(^\|.+\|\n\|[-| :]+\|\n(?:\|.+\|(?:\n|$))+)/gm, tableBlock => {
     const rows = tableBlock.trim().split('\n');
     const parseCells = row => row.split('|').filter((_, i, a) => i > 0 && i < a.length - 1).map(c => c.trim());
@@ -327,7 +327,7 @@ export function renderMarkdown(text) {
     return `<div class="md-table-wrap"><table class="md-table"><thead><tr>${headers}</tr></thead><tbody>${bodyRows}</tbody></table></div>`;
   });
 
-  // ── Line breaks — skip lines that already start a block element ──────────────
+ // Line breaks - skip lines that already start a block element 
   h = h.replace(/\n(?!<(?:\/?(?:pre|ul|ol|li|h[1-6]|div|details|summary|blockquote|hr|table|thead|tbody|tr|th|td)))/g, '<br>');
 
   // 2. Restore tool-call cards and thinking cards.

@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 #[serde(rename_all = "snake_case")]
 pub enum EmbeddingProvider {
     /// Built-in, zero-dependency native embedder. Deterministic feature-hashed
-    /// bag of word tokens + char n-grams. This is the default — no model
+    /// bag of word tokens + char n-grams. This is the default - no model
     /// download, no network, no extra process.
     Native,
     /// Legacy mock (xor-shift random vectors). Kept only for tests that rely
@@ -49,7 +49,7 @@ impl LLMConfig {
             .unwrap_or_else(|_| "https://api.openai.com/v1".to_string());
         let api_key = std::env::var("ROOK_LLM_API_KEY").unwrap_or_else(|_| String::new());
 
-        // Default to the native embedder — zero-dep, no network, instant.
+        // Default to the native embedder - zero-dep, no network, instant.
         // Opt into remote/ollama by setting ROOK_EMBEDDING_PROVIDER.
         let embedding_provider = std::env::var("ROOK_EMBEDDING_PROVIDER")
             .map(|v| EmbeddingProvider::from_env_value(&v))
@@ -129,7 +129,7 @@ pub struct Message {
     /// Populated on assistant messages that invoke tools.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tool_calls: Option<Vec<ToolCallDefinition>>,
-    /// Required on role:"tool" messages — must match the tool_call id.
+    /// Required on role:"tool" messages - must match the tool_call id.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tool_call_id: Option<String>,
     /// Raw reasoning payload returned by the model on the previous turn.
@@ -270,7 +270,7 @@ pub struct Choice {
 pub struct ResponseMessage {
     #[serde(default)]
     pub role: String,
-    /// Content from the LLM — either a JSON string (standard OpenAI format) or a
+    /// Content from the LLM - either a JSON string (standard OpenAI format) or a
     /// JSON array of content blocks (Anthropic-format extended thinking from Vertex AI).
     /// Use [`text_content`] to get the human-readable text portion.
     pub content: Option<serde_json::Value>,
@@ -374,7 +374,7 @@ pub struct StreamDelta {
     /// Some providers use `reasoning_content` instead of `reasoning`
     #[serde(default)]
     pub reasoning_content: Option<String>,
-    /// Streaming tool call deltas — arguments arrive as incremental string fragments
+    /// Streaming tool call deltas - arguments arrive as incremental string fragments
     #[serde(default)]
     pub tool_calls: Option<Vec<StreamToolCallDelta>>,
 }

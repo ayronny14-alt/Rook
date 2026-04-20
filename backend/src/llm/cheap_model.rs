@@ -42,13 +42,13 @@ struct CachedPick {
     at: Instant,
 }
 
-// base_url -> (model, cached_at). 1-hour TTL is plenty — model catalogues rarely change.
+// base_url -> (model, cached_at). 1-hour TTL is plenty - model catalogues rarely change.
 fn cache() -> &'static Mutex<HashMap<String, CachedPick>> {
     static CACHE: OnceLock<Mutex<HashMap<String, CachedPick>>> = OnceLock::new();
     CACHE.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
-const CACHE_TTL: Duration = Duration::from_secs(60 * 60);
+const CACHE_TTL: Duration = Duration::from_secs(60 * 60); // an hour is plenty. models don't get cheaper by the minute.
 
 /// Returns the cheapest-looking model id served by the provider, or `None`
 /// if the endpoint doesn't expose one. Result is cached for an hour per base_url.
@@ -97,7 +97,7 @@ fn rank_cheapest(entries: &[ModelEntry]) -> Option<String> {
             return Some(entries[idx].id.clone());
         }
     }
-    // Nothing matched — don't route. Caller falls back to primary.
+    // Nothing matched - don't route. Caller falls back to primary.
     None
 }
 

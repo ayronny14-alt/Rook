@@ -7,9 +7,9 @@ use std::path::Path;
 use tokio::process::{Child, Command};
 use tracing::{debug, info, warn};
 
-// ── MCP config schema (standard mcpServers format) ───────────────────────
+// MCP config schema (standard mcpServers format) 
 
-/// A single MCP server entry — standard `mcpServers` schema used by MCP hosts.
+/// A single MCP server entry - standard `mcpServers` schema used by MCP hosts.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct McpServerConfig {
     pub command: String,
@@ -55,17 +55,17 @@ pub struct McpConfigFile {
     pub mcp_servers: HashMap<String, McpServerConfig>,
 }
 
-// ── Entry-point detection ─────────────────────────────────────────────────
+// Entry-point detection 
 
 /// Detect how to run an MCP server from its install directory.
 ///
-/// Returns `(entry_point_string, McpServerConfig)` — the string is for DB
+/// Returns `(entry_point_string, McpServerConfig)` - the string is for DB
 /// storage; the config is written to `mcp.json`.
 pub async fn detect_mcp_config(
     install_path: &Path,
     _plugin_id: &str,
 ) -> Option<(String, McpServerConfig)> {
-    // ── 0a. Official MCP Registry server.json (highest priority) ────────
+ // 0a. Official MCP Registry server.json (highest priority) 
     // Schema: https://static.modelcontextprotocol.io/schemas/*/server.schema.json
     // Contains the exact registry package (npm/pypi) + env var requirements.
     let server_json_path = install_path.join("server.json");
@@ -155,7 +155,7 @@ pub async fn detect_mcp_config(
         }
     }
 
-    // ── 0b. Existing mcp.json ─────────────────────────────────────────────
+ // 0b. Existing mcp.json 
     let mcp_json_path = install_path.join("mcp.json");
     if mcp_json_path.exists() {
         if let Ok(text) = tokio::fs::read_to_string(&mcp_json_path).await {
@@ -182,7 +182,7 @@ pub async fn detect_mcp_config(
         }
     }
 
-    // ── 1. Node.js ───────────────────────────────────────────────────────
+ // 1. Node.js 
     let pkg_path = install_path.join("package.json");
     if pkg_path.exists() {
         if let Ok(text) = tokio::fs::read_to_string(&pkg_path).await {
@@ -275,7 +275,7 @@ pub async fn detect_mcp_config(
         }
     }
 
-    // ── 2. Python ────────────────────────────────────────────────────────
+ // 2. Python 
     let pyproject = install_path.join("pyproject.toml");
     let setup_py = install_path.join("setup.py");
     let setup_cfg = install_path.join("setup.cfg");
@@ -373,7 +373,7 @@ pub async fn detect_mcp_config(
         }
     }
 
-    // ── 3. Rust binary ───────────────────────────────────────────────────
+ // 3. Rust binary 
     let cargo_toml = install_path.join("Cargo.toml");
     if cargo_toml.exists() {
         if let Ok(text) = tokio::fs::read_to_string(&cargo_toml).await {
@@ -402,7 +402,7 @@ pub async fn detect_mcp_config(
         }
     }
 
-    // ── 4. Go ────────────────────────────────────────────────────────────
+ // 4. Go 
     if install_path.join("go.mod").exists() {
         for candidate in &["main.go", "cmd/server/main.go", "cmd/main.go"] {
             if install_path.join(candidate).exists() {
@@ -418,7 +418,7 @@ pub async fn detect_mcp_config(
         }
     }
 
-    // ── 5. Shell scripts ─────────────────────────────────────────────────
+ // 5. Shell scripts 
     for script in &["run.sh", "start.sh", "server.sh"] {
         let p = install_path.join(script);
         if p.exists() {
@@ -437,7 +437,7 @@ pub async fn detect_mcp_config(
     None
 }
 
-/// Legacy wrapper — returns just the entry-point string.
+/// Legacy wrapper - returns just the entry-point string.
 pub async fn detect_entry_point(install_path: &Path) -> Option<String> {
     detect_mcp_config(install_path, "").await.map(|(ep, _)| ep)
 }
@@ -498,7 +498,7 @@ async fn which_available(program: &str) -> bool {
     result.map(|s| s.success()).unwrap_or(false)
 }
 
-// ── MCP subprocess runner ─────────────────────────────────────────────────
+// MCP subprocess runner 
 
 /// Represents a running MCP server child process.
 pub struct McpProcess {
@@ -588,7 +588,7 @@ impl McpProcess {
     }
 }
 
-// ── MCP Manager ───────────────────────────────────────────────────────────
+// MCP Manager 
 
 pub struct McpManager {
     pub processes: std::collections::HashMap<String, McpProcess>,

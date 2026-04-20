@@ -64,7 +64,7 @@ if (!gotSingleInstanceLock) {
   });
 }
 
-// electron-updater is a production dep — should always be present.
+// electron-updater is a production dep - should always be present.
 // if for some reason it's missing, fall back to a no-op stub so the app starts.
 let autoUpdater;
 try {
@@ -179,7 +179,7 @@ async function checkForUpdates() {
   try {
     await autoUpdater.checkForUpdates();
   } catch (err) {
-    // error event handler already records state — this just stops the
+    // error event handler already records state - this just stops the
     // unhandled-rejection noise in the log.
     console.error('[update] check failed:', err.message || err);
   }
@@ -191,7 +191,7 @@ async function startUpdateInstall() {
     throw new Error('Updater only runs in packaged builds');
   }
   if (updateState.status === 'ready') {
-    // Download already finished — jump straight to install.
+    // Download already finished - jump straight to install.
     isShuttingDown = true;
     backendManager.stop();
     pipeReady = false;
@@ -357,7 +357,7 @@ function createWindow() {
 
   mainWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'));
 
-  // Hide to tray instead of closing — lets global hotkey bring it back
+  // Hide to tray instead of closing - lets global hotkey bring it back
   mainWindow.on('close', (e) => {
     if (!isShuttingDown) {
       e.preventDefault();
@@ -627,7 +627,7 @@ app.whenReady().then(() => {
   createWindow();
   createTray();
 
-  // Alt+Space — show/hide Rook from anywhere on the desktop
+  // Alt+Space - show/hide Rook from anywhere on the desktop
   globalShortcut.register('Alt+Space', () => {
     if (!mainWindow) { createWindow(); return; }
     if (mainWindow.isVisible() && mainWindow.isFocused()) {
@@ -675,7 +675,7 @@ app.on('will-quit', () => globalShortcut.unregisterAll());
 
 // Keep app alive in tray when all windows close
 app.on('window-all-closed', () => {
-  // On Windows, don't auto-quit — user can bring it back via tray or Alt+Space
+  // On Windows, don't auto-quit - user can bring it back via tray or Alt+Space
   // If they want to quit, they use the tray menu
   if (process.platform === 'darwin') app.quit();
 });

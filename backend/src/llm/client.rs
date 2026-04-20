@@ -163,7 +163,7 @@ impl LLMClient {
             .context("override JSON parse")
     }
 
-    /// True when the active config has no API key — Chat returns deterministic
+    /// True when the active config has no API key - Chat returns deterministic
     /// mock responses. The frontend can use this to render a "MOCK" badge so
     /// users don't think bad outputs are bugs.
     pub fn is_mock_mode(&self) -> bool {
@@ -270,7 +270,7 @@ impl LLMClient {
             (m, url, String::new())
         } else {
             if self.config.api_key.trim().is_empty() {
-                return Ok(None); // mock mode — no streaming available
+                return Ok(None); // mock mode - no streaming available
             }
             (
                 self.config.model.clone(),
@@ -434,7 +434,7 @@ impl LLMClient {
 
     pub async fn get_embedding(&self, text: &str) -> Result<Vec<f32>> {
         // Process-wide LRU cache keyed by (provider, model, content-hash).
-        // Re-embedding the same text is a no-op network call otherwise —
+        // Re-embedding the same text is a no-op network call otherwise -
         // memory writes, searches, and re-ranks all share this cache.
         let key = embedding_cache_key(
             &self.config.embedding_provider,
@@ -457,7 +457,7 @@ impl LLMClient {
                     match self.get_remote_embedding(text).await {
                         Ok(v) => v,
                         Err(err) => {
-                            warn!("Remote embedding failed ({}) — using native embedder", err);
+                            warn!("Remote embedding failed ({}) - using native embedder", err);
                             crate::memory::local_embed::embed(text)
                         }
                     }
@@ -466,7 +466,7 @@ impl LLMClient {
             EmbeddingProvider::Ollama => match self.get_ollama_embedding(text).await {
                 Ok(embedding) => embedding,
                 Err(err) => {
-                    warn!("Ollama embedding failed ({}) — using native embedder", err);
+                    warn!("Ollama embedding failed ({}) - using native embedder", err);
                     crate::memory::local_embed::embed(text)
                 }
             },
@@ -629,12 +629,12 @@ impl LLMClient {
     }
 }
 
-// ── Embedding LRU cache ──────────────────────────────────────────────────
+// Embedding LRU cache 
 //
 // Cheap FIFO-style LRU. Keyed by (provider, model, blake-ish hash of content).
 // Bounded to 4096 entries (~4096 × 768 × 4B ≈ 12MB) so it won't grow unbounded.
 // Massive speedup for repeat queries, re-embeds during write dedup, re-ranks
-// after vector search, and the periodic UI indexer — all hit the cache.
+// after vector search, and the periodic UI indexer - all hit the cache.
 
 const EMBEDDING_CACHE_CAP: usize = 4096;
 
@@ -690,7 +690,7 @@ fn embedding_cache() -> &'static EmbeddingCacheHandle {
 }
 
 fn embedding_cache_key(provider: &EmbeddingProvider, model: &str, text: &str) -> u64 {
-    // stable hash — std DefaultHasher is enough; collisions just force a refetch
+    // stable hash - std DefaultHasher is enough; collisions just force a refetch
     use std::hash::{Hash, Hasher};
     let mut h = std::collections::hash_map::DefaultHasher::new();
     (provider as *const _ as usize).hash(&mut h);

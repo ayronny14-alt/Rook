@@ -85,7 +85,7 @@ impl SlidingWindow {
         // Query-type routing: classify first so we can size the retrieval budget.
         let qtype = classify_query(user_message);
 
-        // Bounded retrieval budget — not every query needs 6 memory nodes.
+        // Bounded retrieval budget - not every query needs 6 memory nodes.
         // Trivia / greetings get zero; research / conceptual queries get the most.
         let memory_topk = match (qtype, user_message.trim().len()) {
             (_, len) if len < 12 => 0, // "hi", "thanks", one-word pings
@@ -96,7 +96,7 @@ impl SlidingWindow {
             (QueryType::Conceptual, _) => 8,
         };
 
-        // Skip retrieval entirely when the budget is zero — saves an embedding call
+        // Skip retrieval entirely when the budget is zero - saves an embedding call
         // and all MMR work for throwaway messages.
         let ranked = if memory_topk == 0 {
             Vec::new()
@@ -336,8 +336,8 @@ fn truncate_for(s: &str, max_chars: usize) -> String {
 
 fn classify_query(q: &str) -> QueryType {
     let ql = q.to_ascii_lowercase();
-    // Check Code before Ui — "how do I build this?" should be Code, not Ui.
-    // Check Troubleshoot before Ui — "error when I run" should be Troubleshoot.
+    // Check Code before Ui - "how do I build this?" should be Code, not Ui.
+    // Check Troubleshoot before Ui - "error when I run" should be Troubleshoot.
     if ql.contains("error")
         || ql.contains("stack trace")
         || ql.contains("panic")

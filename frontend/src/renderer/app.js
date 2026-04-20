@@ -1,14 +1,12 @@
-// ── Rook App ───────────────────────────────────────────────────────────────
+// Rook App 
 import { uid, esc, escHtml, buildToolCard, buildThinkingCard, renderMarkdown, safeMarkdown } from './modules/util.js';
 import { initPlugins, loadPluginsInstalled, loadBrowse, handlePluginList, handlePluginAction } from './modules/plugins.js';
 
 const api = window.rook;
 
 
-// ════════════════════════════════════════
-// STATE
-// ════════════════════════════════════════
-let currentConvId = null;
+// // STATE
+// let currentConvId = null;
 let conversations  = [];
 let streaming      = false;
 let _convHasSentMessage = false; // tracks whether a message was sent in current conv (for memory panel empty state)
@@ -18,7 +16,7 @@ let streamThinking = '';
 let pendingApproval = null;
 let currentMode    = localStorage.getItem('rook-mode') || 'Chat';
 let _lastSettingsHash = '';
-// In-flight chat id — needed so the Stop button can target the exact request.
+// In-flight chat id - needed so the Stop button can target the exact request.
 // We track it here (rather than per-bubble) so a future "Cancel last" shortcut
 // can hit the right id without DOM scraping.
 let inFlightChatId = null;
@@ -39,10 +37,8 @@ let activeTabId    = null;
 let currentAppVersion = null;
 let currentUpdateState = null;
 
-// ════════════════════════════════════════
-// DOM
-// ════════════════════════════════════════
-const startupOverlay  = document.getElementById('startup-overlay');
+// // DOM
+// const startupOverlay  = document.getElementById('startup-overlay');
 // Status text node lives inside #startup-status now (after editorial redesign)
 const startupStatus   = document.getElementById('startup-status-text') || document.getElementById('startup-status');
 const startupLog      = document.getElementById('startup-log');
@@ -99,10 +95,8 @@ const cmdPaletteOverlay = document.getElementById('cmd-palette-overlay');
 const cmdInput          = document.getElementById('cmd-input');
 const cmdResultsEl      = document.getElementById('cmd-results');
 
-// ════════════════════════════════════════
-// STARTUP OVERLAY
-// ════════════════════════════════════════
-let backendReady = false;
+// // STARTUP OVERLAY
+// let backendReady = false;
 
 // Restore conversations from localStorage immediately so the sidebar is
 // populated before the backend connects (avoids a blank flash).
@@ -129,7 +123,7 @@ api.onPipeStatus((s) => {
       startupStatus.classList.add('connected');
       setTimeout(dismissStartup, 400);
     }
-    // Resend saved settings on (re)connection — backend loses in-memory config on
+    // Resend saved settings on (re)connection - backend loses in-memory config on
     // restart. Skip if identical to what we already sent (avoids redundant IPC).
     const saved = JSON.parse(localStorage.getItem('rook-settings') || '{}');
     if (saved.apiUrl || saved.apiKey || saved.model || saved.platformApiKey) {
@@ -202,7 +196,7 @@ api.onPipeStatus((s) => {
     connDot.title = 'Backend offline';
     connDot.setAttribute('aria-label', 'Backend offline');
     reconnectBanner?.classList.remove('hidden');
-    chatInput.placeholder = 'Backend offline — reconnecting…';
+    chatInput.placeholder = 'Backend offline - reconnecting…';
   }
 
   if (s.connected) {
@@ -257,7 +251,7 @@ function dismissOnboarding() {
   // kept as a no-op so any stale callers don't throw
 }
 
-// ── First-run setup display ──────────────────────────────────────────────────
+// First-run setup display 
 const SETUP_STEPS = [
   { id: 'step-workspace', label: 'Creating workspace folder' },
   { id: 'step-config',    label: 'Writing default configuration' },
@@ -289,7 +283,7 @@ function activateStep(id) {
 api.onAppInit?.((data) => {
   if (!data?.firstRun) return;
   const marker = document.getElementById('startup-marker');
-  if (marker) marker.textContent = '— FIRST-TIME SETUP';
+  if (marker) marker.textContent = '- FIRST-TIME SETUP';
   const statusText = document.getElementById('startup-status-text');
   if (statusText) statusText.textContent = 'Setting up Rook';
 
@@ -301,14 +295,12 @@ api.onAppInit?.((data) => {
   // step-backend completes when pipe connects (handled in onPipeStatus)
 });
 
-// Show the app after 1.5 s regardless — backend connects in background
+// Show the app after 1.5 s regardless - backend connects in background
 setTimeout(dismissStartup, 1500);
 
 
-// ════════════════════════════════════════
-// WINDOW CONTROLS
-// ════════════════════════════════════════
-document.getElementById('btn-min').addEventListener('click',   () => api.minimize());
+// // WINDOW CONTROLS
+// document.getElementById('btn-min').addEventListener('click',   () => api.minimize());
 document.getElementById('btn-max').addEventListener('click',   () => api.maximize());
 document.getElementById('btn-close').addEventListener('click', () => api.close());
 
@@ -324,17 +316,15 @@ Promise.all([
   }
 }).catch(() => {});
 
-// Mock badge is clickable — opens Settings so the user can enter an API key.
+// Mock badge is clickable - opens Settings so the user can enter an API key.
 if (mockBadge) {
   mockBadge.style.cursor = 'pointer';
-  mockBadge.title = 'Running without an API key — click to open Settings';
+  mockBadge.title = 'Running without an API key - click to open Settings';
   mockBadge.addEventListener('click', () => switchPage('settings'));
 }
 
-// ════════════════════════════════════════
-// PAGE NAVIGATION
-// ════════════════════════════════════════
-document.querySelectorAll('.ab-btn[data-page]').forEach(btn => {
+// // PAGE NAVIGATION
+// document.querySelectorAll('.ab-btn[data-page]').forEach(btn => {
   btn.addEventListener('click', () => switchPage(btn.dataset.page));
 });
 
@@ -414,10 +404,8 @@ function renderUpdateBanner(state) {
   }
 }
 
-// ════════════════════════════════════════
-// BACKEND MESSAGES
-// ════════════════════════════════════════
-api.onMessage((msg) => {
+// // BACKEND MESSAGES
+// api.onMessage((msg) => {
   switch (msg.type) {
     case 'chat':                  finalizeChat(msg);              break;
     case 'context_curated':       renderMemoryPanel(msg.nodes || []); break;
@@ -444,10 +432,10 @@ api.onMessage((msg) => {
       break;
     case 'error':
       // Flush any pending stream state but PRESERVE whatever the user already
-      // saw — silently dropping queued tokens after an error is the worst kind
+      // saw - silently dropping queued tokens after an error is the worst kind
       // of UX because users assume the response was complete.
       tokenQueue.length = 0; drainingTokens = false; pendingDoneMsg = null;
-      sealStreamBubble({ tag: '(error — partial)' });
+      sealStreamBubble({ tag: '(error - partial)' });
       appendMessage('system', formatError(msg.message));
       finishCancelWatchdog();
       setStreaming(false);
@@ -457,7 +445,7 @@ api.onMessage((msg) => {
       // Backend has acknowledged the cancel. Keep the partial response in
       // the transcript with a clear "(cancelled)" tag instead of dropping it.
       tokenQueue.length = 0; drainingTokens = false; pendingDoneMsg = null;
-      sealStreamBubble({ tag: '(cancelled — partial)' });
+      sealStreamBubble({ tag: '(cancelled - partial)' });
       finishCancelWatchdog();
       setStreaming(false);
       inFlightChatId = null;
@@ -504,9 +492,9 @@ api.onMessage((msg) => {
       if (mockBadge) {
         const wasMock = !mockBadge.classList.contains('hidden');
         mockBadge.classList.toggle('hidden', !msg.mock_mode);
-        // First time transitioning into mock mode — prompt the user to add a key.
+        // First time transitioning into mock mode - prompt the user to add a key.
         if (msg.mock_mode && !wasMock) {
-          toast('No API key set — responses are placeholders. Click MOCK or go to Settings to add a key.', 'warn', 10000);
+          toast('No API key set - responses are placeholders. Click MOCK or go to Settings to add a key.', 'warn', 10000);
         }
       }
       break;
@@ -562,8 +550,7 @@ function finishCancelWatchdog() {
   if (btnSend) btnSend.classList.remove('hidden');
 }
 
-// ════════════════════════════════════════
-let tokenQueue = [];
+// let tokenQueue = [];
 let drainingTokens = false;
 let pendingDoneMsg = null;
 
@@ -609,7 +596,7 @@ function handleThinking(thinking) {
     streamBubble.querySelector('.bubble').classList.add('cursor');
     setStreaming(true);
   }
-  // Accumulate thinking text — drainTokenQueue will prepend it each frame
+  // Accumulate thinking text - drainTokenQueue will prepend it each frame
   // so there is always exactly one thought card, never multiples.
   streamThinking += thinking;
   const bub = streamBubble.querySelector('.bubble');
@@ -619,7 +606,7 @@ function handleThinking(thinking) {
 
 function handleChunk(token) {
   // If the user switched conversations while this stream is running, discard
-  // the visual — _finalizeChatDone will still save the content to the right conv.
+  // the visual - _finalizeChatDone will still save the content to the right conv.
   if (streamingConvId !== null && streamingConvId !== currentConvId) return;
   tokenQueue.push(token);
   if (!drainingTokens) drainTokenQueue();
@@ -637,7 +624,7 @@ function drainTokenQueue() {
   }
   drainingTokens = true;
 
-  // Drain ALL queued tokens this tick — accumulating text is cheap, only
+  // Drain ALL queued tokens this tick - accumulating text is cheap, only
   // the DOM update (innerHTML) is expensive, so we want to batch.
   let appended = '';
   while (tokenQueue.length > 0) appended += tokenQueue.shift();
@@ -657,7 +644,7 @@ function drainTokenQueue() {
   bub.innerHTML = safeMarkdown((streamThinking ? buildThinkingCard(streamThinking) : '') + renderMarkdown(streamContent));
 
   // Pulsing dot: visible when the last streamed token closed a [[TOOL:...]] or [[TERR:...]]
-  // card — i.e., the stream is now silent while the backend executes the tool.
+  // card - i.e., the stream is now silent while the backend executes the tool.
   // trimEnd() removes any trailing \n so we only need one endsWith check.
   bub.classList.toggle('agent-running', streamContent.trimEnd().endsWith(']]'));
 
@@ -698,7 +685,7 @@ function _finalizeChatDone(msg) {
       if (msg.usage) { addTokenCount(streamBubble, msg.usage); updateCtxBar(msg.usage); }
       markLastAssistant();
     } else {
-      // User switched conversations mid-stream — remove the orphaned bubble and
+      // User switched conversations mid-stream - remove the orphaned bubble and
       // save the response quietly to the original conversation.
       streamBubble.remove();
       const origConv = conversations.find(c => c.id === msg.conversation_id);
@@ -719,7 +706,7 @@ function _finalizeChatDone(msg) {
   }
   streamingConvId = null;
 
-  // Clear any pending cancel watchdog — chat is done, no warning needed.
+  // Clear any pending cancel watchdog - chat is done, no warning needed.
   finishCancelWatchdog();
   setStreaming(false);
 }
@@ -742,7 +729,7 @@ function finalizeChat(msg) {
     currentConvId = msg.conversation_id;
   }
   streamingConvId = null;
-  // Clear any pending cancel watchdog — chat completed normally.
+  // Clear any pending cancel watchdog - chat completed normally.
   finishCancelWatchdog();
   setStreaming(false);
 }
@@ -753,21 +740,21 @@ function formatError(raw) {
   const lo = s.toLowerCase();
 
   if (/401|unauthorized|invalid.{0,10}api.{0,5}key/i.test(s))
-    return `⚠ API key rejected — check your key in Settings.`;
+    return `⚠ API key rejected - check your key in Settings.`;
   if (/429|rate.?limit|too many requests/i.test(s))
-    return `⚠ Rate limit reached — wait a moment, then retry.`;
+    return `⚠ Rate limit reached - wait a moment, then retry.`;
   if (/timed? ?out|timeout|deadline/i.test(s))
-    return `⚠ Request timed out — the model may be slow or your message too long.`;
+    return `⚠ Request timed out - the model may be slow or your message too long.`;
   if (/connection refused|econnrefused/i.test(s) && lo.includes('ollama'))
-    return `⚠ Ollama not running — start it with \`ollama serve\`, then retry.`;
+    return `⚠ Ollama not running - start it with \`ollama serve\`, then retry.`;
   if (/connection refused|econnrefused/i.test(s))
-    return `⚠ Connection refused — check that the backend is running.`;
+    return `⚠ Connection refused - check that the backend is running.`;
   if (/context.{0,10}length|max.{0,5}tokens|too.{0,10}long/i.test(s))
-    return `⚠ Message too long for this model — start a new conversation or shorten your input.`;
+    return `⚠ Message too long for this model - start a new conversation or shorten your input.`;
   if (/insufficient.{0,10}quota|billing|payment/i.test(s))
-    return `⚠ Account quota exceeded — check your billing details with your API provider.`;
+    return `⚠ Account quota exceeded - check your billing details with your API provider.`;
   if (/model.{0,10}not.{0,10}found|no such model/i.test(s))
-    return `⚠ Model not found — check the model name in Settings.`;
+    return `⚠ Model not found - check the model name in Settings.`;
 
   return `⚠ ${s}`;
 }
@@ -780,7 +767,7 @@ function addTokenCount(wrap, usage) {
   wrap.appendChild(el);
 }
 
-// Static hint text — restored when streaming ends
+// Static hint text - restored when streaming ends
 const HINT_DEFAULT = inputHint ? inputHint.innerHTML : 'Enter · send &nbsp; Shift+Enter · newline';
 
 function setStreaming(v) {
@@ -802,7 +789,7 @@ function setStreaming(v) {
     if (wasStreaming && !document.hasFocus()) {
       const conv  = conversations.find(c => c.id === currentConvId);
       const title = conv?.title || 'Rook';
-      api.showNotification?.(title, 'Agent finished — click to view');
+      api.showNotification?.(title, 'Agent finished - click to view');
     }
   } else {
     // Show agent-working hint while streaming
@@ -839,8 +826,8 @@ if (btnStop) {
     cancelWatchdogTimer = setTimeout(() => {
       // Backend never acknowledged. Tell the user honestly and let them
       // decide whether to keep waiting or treat the response as broken.
-      appendMessage('system', '⚠ Cancel did not complete within 5s — backend may still be running. The next request will start fresh.');
-      sealStreamBubble({ tag: '(cancel timed out — partial)' });
+      appendMessage('system', '⚠ Cancel did not complete within 5s - backend may still be running. The next request will start fresh.');
+      sealStreamBubble({ tag: '(cancel timed out - partial)' });
       setStreaming(false);
       inFlightChatId = null;
       cancelWatchdogTimer = null;
@@ -848,10 +835,8 @@ if (btnStop) {
   });
 }
 
-// ════════════════════════════════════════
-// TOOL APPROVAL
-// ════════════════════════════════════════
-const AUTO_APPROVE_TOOLS = new Set([
+// // TOOL APPROVAL
+// const AUTO_APPROVE_TOOLS = new Set([
   'file_read', 'list_files', 'get_cwd', 'glob', 'grep', 'search_in_file',
   'outline_file', 'file_diff', 'git_status', 'git_diff', 'git_log', 'git_branch',
   'shell_list', 'shell_read', 'todo_write',
@@ -906,15 +891,13 @@ btnReject.addEventListener('click', () => {
   pendingApproval = null;
 });
 
-// ════════════════════════════════════════
-// SEND MESSAGE
-// ════════════════════════════════════════
-function sendMessage() {
+// // SEND MESSAGE
+// function sendMessage() {
   const text = chatInput.value.trim();
   const hasImages = pendingImages.length > 0;
   if ((!text && !hasImages) || streaming) return;
 
-  // /schedule — intercepts before hitting the LLM.
+  // /schedule - intercepts before hitting the LLM.
   // forms:
   //   /schedule                                   -> opens modal
   //   /schedule list                              -> asks backend for list
@@ -993,10 +976,8 @@ function autoResize() {
   chatInput.style.height = Math.min(chatInput.scrollHeight, 160) + 'px';
 }
 
-// ════════════════════════════════════════
-// AGENT MODE DROPDOWN
-// ════════════════════════════════════════
-btnModeToggle.addEventListener('click', (e) => {
+// // AGENT MODE DROPDOWN
+// btnModeToggle.addEventListener('click', (e) => {
   e.stopPropagation();
   modeMenu.classList.toggle('hidden');
   const open = !modeMenu.classList.contains('hidden');
@@ -1046,10 +1027,8 @@ document.addEventListener('click', (e) => {
   }
 });
 
-// ════════════════════════════════════════
-// CONVERSATIONS
-// ════════════════════════════════════════
-btnNewChat.addEventListener('click', () => {
+// // CONVERSATIONS
+// btnNewChat.addEventListener('click', () => {
   currentConvId = null;
   window._memoryPanelSeenConv = null;
   _convHasSentMessage = false;
@@ -1072,10 +1051,8 @@ function saveAssistantMsg(content, convId) {
 
 // renderConvList is defined at the bottom of this file (with pin/star support).
 
-// ════════════════════════════════════════
-// MESSAGES
-// ════════════════════════════════════════
-function appendMessage(role, content) {
+// // MESSAGES
+// function appendMessage(role, content) {
   hideEmptyState();
   const wrap = document.createElement('div');
   wrap.className = `message ${role}`;
@@ -1101,7 +1078,7 @@ function appendMessage(role, content) {
     regenRow.querySelector('.regen-btn').addEventListener('click', () => {
       if (!currentConvId || streaming) return;
       api.send({ type: 'regenerate_last_message', id: uid(), conversation_id: currentConvId });
-      // Remove this message from the DOM — the regenerated one will take its place
+      // Remove this message from the DOM - the regenerated one will take its place
       wrap.remove();
       setStreaming(true);
     });
@@ -1138,7 +1115,7 @@ function appendMessage(role, content) {
   scrollBottom();
   return wrap;
 }
-// ── Scroll-lock: don't fight the user's scroll during streaming ──────────────
+// Scroll-lock: don't fight the user's scroll during streaming 
 let userScrolledUp = false;
 
 // Create the scroll-to-bottom anchor button
@@ -1175,7 +1152,7 @@ function scrollBottom() {
   }
 }
 
-// Copy button for code blocks — delegated so it works on dynamically rendered content
+// Copy button for code blocks - delegated so it works on dynamically rendered content
 messagesEl.addEventListener('click', e => {
   const btn = e.target.closest('.copy-btn');
   if (!btn) return;
@@ -1193,7 +1170,7 @@ messagesEl.addEventListener('click', e => {
 document.getElementById('btn-export-chat')?.addEventListener('click', exportConversation);
 function exportConversation() {
   const conv = conversations.find(c => c.id === currentConvId);
-  if (!conv?.messages?.length) { toast('Nothing to export — start a conversation first.', 'warn'); return; }
+  if (!conv?.messages?.length) { toast('Nothing to export - start a conversation first.', 'warn'); return; }
   try {
     const lines = [`# ${conv.title || 'Conversation'}\n`];
     for (const m of conv.messages) {
@@ -1212,15 +1189,11 @@ function exportConversation() {
   }
 }
 
-// ════════════════════════════════════════
-// MARKDOWN
-// ════════════════════════════════════════
+// // MARKDOWN
+// 
 
-
-// ════════════════════════════════════════
-// ARTIFACT VIEWER
-// ════════════════════════════════════════
-function openArtifact(name, content) {
+// // ARTIFACT VIEWER
+// function openArtifact(name, content) {
   const id = uid();
   const type = /^\s*<(!DOCTYPE|html)/i.test(content) ? 'html' : 'text';
   artifactTabs.push({ id, name, content, type });
@@ -1294,10 +1267,8 @@ function handlePreviews(previews) {
 
 function loadPreviews() { api.send({ type: 'get_previews', id: uid() }); }
 
-// ════════════════════════════════════════
-// MEMORY PAGE
-// ════════════════════════════════════════
-document.getElementById('btn-mem-search').addEventListener('click', searchMemory);
+// // MEMORY PAGE
+// document.getElementById('btn-mem-search').addEventListener('click', searchMemory);
 document.getElementById('mem-query').addEventListener('keydown', e => { if (e.key === 'Enter') searchMemory(); });
 
 function searchMemory() {
@@ -1376,7 +1347,7 @@ function renderGraphView() {
   document.getElementById('mem-stat-shown').textContent = nodes.length;
 
   if (!nodes.length) {
-    container.innerHTML = `<div class="mem-empty"><div class="mem-empty-icon">◎</div><div class="mem-empty-title">No memory nodes${_memoryTypeFilter ? ` of type "${_memoryTypeFilter}"` : ''}</div><div class="mem-empty-hint">${_memoryTypeFilter ? 'Try a different type filter.' : 'Start chatting — Rook will store what it learns here.'}</div></div>`;
+    container.innerHTML = `<div class="mem-empty"><div class="mem-empty-icon">◎</div><div class="mem-empty-title">No memory nodes${_memoryTypeFilter ? ` of type "${_memoryTypeFilter}"` : ''}</div><div class="mem-empty-hint">${_memoryTypeFilter ? 'Try a different type filter.' : 'Start chatting - Rook will store what it learns here.'}</div></div>`;
     return;
   }
 
@@ -1425,7 +1396,7 @@ function renderGraphView() {
             <div class="mem-node-section-label">Connected nodes</div>
             <div class="mem-node-edges">click to load…</div>
           </div>
-          <div class="mem-node-id">id: ${escHtml(n.id || '—')}</div>
+          <div class="mem-node-id">id: ${escHtml(n.id || '-')}</div>
         </div>
       </details>`;
     }
@@ -1465,10 +1436,8 @@ function handleConnectedNodes(msg) {
 
 document.getElementById('btn-mem-refresh')?.addEventListener('click', () => searchMemory());
 
-// ════════════════════════════════════════
-// SKILLS PAGE
-// ════════════════════════════════════════
-document.getElementById('btn-reload-skills').addEventListener('click', loadSkills);
+// // SKILLS PAGE
+// document.getElementById('btn-reload-skills').addEventListener('click', loadSkills);
 function loadSkills() {
   const list = document.getElementById('skills-list');
   list.innerHTML = '<li style="color:var(--text-2);padding:10px 12px">Loading…</li>';
@@ -1493,15 +1462,11 @@ function renderSkills(skills) {
   }
 }
 
-// ════════════════════════════════════════
-// PLUGINS PAGE
-// ════════════════════════════════════════
+// // PLUGINS PAGE
+// 
 
-
-// ════════════════════════════════════════
-// GEMMA LAUNCH
-// ════════════════════════════════════════
-function handleGemmaLaunched(msg) {
+// // GEMMA LAUNCH
+// function handleGemmaLaunched(msg) {
   if (msg.success) {
     appendMessage('system', `✓ ${msg.message}`);
   } else {
@@ -1514,7 +1479,7 @@ function handleGemmaLaunched(msg) {
 modelSelect.addEventListener('change', () => {
   const val = modelSelect.value;
   if (val && (val.startsWith('gemma') || val.startsWith('kiwi_kiwi/')) && val.includes(':')) {
-    appendMessage('system', `Launching ${val} — please wait…`);
+    appendMessage('system', `Launching ${val} - please wait…`);
     api.send({ type: 'launch_gemma', id: uid(), model: val });
   } else {
     modelSelect.dataset.lastGoodValue = val;
@@ -1522,19 +1487,17 @@ modelSelect.addEventListener('change', () => {
 });
 
 
-// ════════════════════════════════════════
-// platform sign-in removed. Rook is BYO-key, routed straight to the
+// // platform sign-in removed. Rook is BYO-key, routed straight to the
 // provider the user configured in Settings. the stubs below exist only so
 // any stale callers don't throw.
 function syncPlatformAuthUI() {}
 function refreshPlatformSession() {}
 function updatePlatformStatus() {}
 
-// ════════════════════════════════════════
-function loadSettings() {
+// function loadSettings() {
   try {
     const s = JSON.parse(localStorage.getItem('rook-settings') || '{}');
-    // Always show custom API fields — users can bring their own key even when platform-connected
+    // Always show custom API fields - users can bring their own key even when platform-connected
     document.getElementById('s-api-url').value              = s.apiUrl  || '';
     document.getElementById('s-api-key').value              = s.apiKey  || '';
     document.getElementById('s-backend-path').value         = s.backendPath  || '';
@@ -1577,7 +1540,7 @@ function applySettings(s) {
 document.getElementById('btn-save-settings').addEventListener('click', saveSettings);
 loadSettings();
 
-// ── Model fetching ───────────────────────────────────────────────────────────
+// Model fetching 
 async function fetchModels({ silent = false } = {}) {
   const s = JSON.parse(localStorage.getItem('rook-settings') || '{}');
   // Platform-connected: models are already set by populatePlatformModels(), don't call external API
@@ -1604,7 +1567,7 @@ async function fetchModels({ silent = false } = {}) {
     // Populate top-right model select
     if (sel) {
       const prev = sel.value;
-      sel.innerHTML = '<option value="">— model —</option>';
+      sel.innerHTML = '<option value="">- model -</option>';
       models.forEach(id => {
         const o = document.createElement('option');
         o.value = id; o.textContent = id;
@@ -1616,7 +1579,7 @@ async function fetchModels({ silent = false } = {}) {
     // Populate settings model select
     if (sSel) {
       const prev = sSel.value || s.model || '';
-      sSel.innerHTML = '<option value="">— select model —</option>';
+      sSel.innerHTML = '<option value="">- select model -</option>';
       models.forEach(id => {
         const o = document.createElement('option');
         o.value = id; o.textContent = id;
@@ -1624,7 +1587,7 @@ async function fetchModels({ silent = false } = {}) {
         sSel.appendChild(o);
       });
       if (!sSel.value && prev) {
-        // Model from settings not in list — add it
+        // Model from settings not in list - add it
         const o = document.createElement('option');
         o.value = prev; o.textContent = prev + ' (custom)'; o.selected = true;
         sSel.appendChild(o);
@@ -1638,7 +1601,7 @@ async function fetchModels({ silent = false } = {}) {
     [sel, sSel].forEach(el => {
       if (!el) return;
       if (el.options.length <= 1) {
-        el.innerHTML = '<option value="">— model —</option>';
+        el.innerHTML = '<option value="">- model -</option>';
         if (fallback) {
           const o = document.createElement('option');
           o.value = fallback; o.textContent = fallback; o.selected = true;
@@ -1655,7 +1618,7 @@ async function fetchModels({ silent = false } = {}) {
 document.getElementById('btn-refresh-models')?.addEventListener('click', () => fetchModels());
 document.getElementById('btn-fetch-models')?.addEventListener('click',   () => fetchModels());
 
-// ── API Profiles ─────────────────────────────────────────────────────────────
+// API Profiles 
 function getProfiles() {
   try { return JSON.parse(localStorage.getItem('rook-profiles') || '[]'); }
   catch { return []; }
@@ -1699,7 +1662,7 @@ function applyProfile(p) {
       }
     }
   }
-  toast(`Profile "${p.name}" applied — save to activate`);
+  toast(`Profile "${p.name}" applied - save to activate`);
 }
 document.getElementById('btn-save-profile')?.addEventListener('click', () => {
   const name = document.getElementById('profile-name-input')?.value.trim();
@@ -1718,7 +1681,7 @@ document.getElementById('btn-save-profile')?.addEventListener('click', () => {
   toast(`Profile "${name}" saved`);
 });
 
-// ── Settings nav tab switching ───────────────────────────────────────────────
+// Settings nav tab switching 
 document.querySelectorAll('.snav-item[data-target]').forEach(btn => {
   btn.addEventListener('click', () => {
     document.querySelectorAll('.snav-item').forEach(b => b.classList.remove('active'));
@@ -1728,7 +1691,7 @@ document.querySelectorAll('.snav-item[data-target]').forEach(btn => {
   });
 });
 
-// Eye buttons — reveal/hide secret inputs
+// Eye buttons - reveal/hide secret inputs
 document.querySelectorAll('.sfield-eye[data-for]').forEach(btn => {
   btn.addEventListener('click', () => {
     const input = document.getElementById(btn.dataset.for);
@@ -1752,17 +1715,14 @@ initPlugins({ api, appendMessage, switchPage, toast });
 // Kick off the browse list immediately (no backend needed)
 loadBrowse(true);
 
-// Fetch models on startup (silent — will silently skip if no key configured)
+// Fetch models on startup (silent - will silently skip if no key configured)
 fetchModels({ silent: true });
 
-// ════════════════════════════════════════
-// HEARTBEAT
-// ════════════════════════════════════════
-setInterval(() => api.send({ type: 'health_check', id: uid() }), 30_000);
+// // HEARTBEAT
+// setInterval(() => api.send({ type: 'health_check', id: uid() }), 30_000);
 
 
-// ════════════════════════════════════════
-const memoryFeedbackState = new Map();
+// const memoryFeedbackState = new Map();
 
 function openMemoryPanel()  { memoryPanel.classList.remove('hidden'); btnMemoryToggle?.classList.add('active'); }
 function closeMemoryPanel() { memoryPanel.classList.add('hidden');    btnMemoryToggle?.classList.remove('active'); }
@@ -1773,15 +1733,15 @@ btnMemoryClose ?.addEventListener('click', closeMemoryPanel);
 // Global keyboard shortcuts
 document.addEventListener('keydown', (e) => {
   const mod = e.ctrlKey || e.metaKey;
-  // Ctrl+M — toggle memory panel
+  // Ctrl+M - toggle memory panel
   if (mod && e.key.toLowerCase() === 'm') { e.preventDefault(); toggleMemoryPanel(); return; }
-  // Ctrl+K — command palette
+  // Ctrl+K - command palette
   if (mod && e.key.toLowerCase() === 'k') { e.preventDefault(); cmdPaletteOverlay.classList.contains('hidden') ? openPalette() : closePalette(); return; }
-  // Ctrl+N — new chat
+  // Ctrl+N - new chat
   if (mod && e.key.toLowerCase() === 'n') { e.preventDefault(); btnNewChat.click(); return; }
-  // Ctrl+/ — go to memory page
+  // Ctrl+/ - go to memory page
   if (mod && e.key === '/') { e.preventDefault(); switchPage('memory'); return; }
-  // Ctrl+R — regenerate last response
+  // Ctrl+R - regenerate last response
   if (mod && e.key.toLowerCase() === 'r' && !streaming && currentConvId) {
     e.preventDefault();
     api.send({ type: 'regenerate_last_message', id: uid(), conversation_id: currentConvId });
@@ -1790,7 +1750,7 @@ document.addEventListener('keydown', (e) => {
     setStreaming(true);
     return;
   }
-  // Escape — stop streaming, or close palette / mode menu
+  // Escape - stop streaming, or close palette / mode menu
   if (e.key === 'Escape') {
     if (!cmdPaletteOverlay.classList.contains('hidden')) { closePalette(); return; }
     if (!modeMenu.classList.contains('hidden')) { modeMenu.classList.add('hidden'); btnModeToggle.classList.remove('open'); return; }
@@ -1798,7 +1758,7 @@ document.addEventListener('keydown', (e) => {
   }
 });
 
-// Build a plain-language explanation from the numeric scores. No LLM call —
+// Build a plain-language explanation from the numeric scores. No LLM call -
 // this is a template over the fields we already have, so it's free and
 // deterministic. The point is to teach the user *why* a memory surfaced.
 function explainMemoryNode(n) {
@@ -1816,7 +1776,7 @@ function explainMemoryNode(n) {
   const [topLabel, topVal] = scores[0];
   if (topVal >= 0.6)      parts.push(`strong ${topLabel} (${topVal.toFixed(2)})`);
   else if (topVal >= 0.3) parts.push(`moderate ${topLabel} (${topVal.toFixed(2)})`);
-  else                    parts.push(`weak signal overall — top factor was ${topLabel}`);
+  else                    parts.push(`weak signal overall - top factor was ${topLabel}`);
   const related = (n.related_titles || []).slice(0, 2);
   if (related.length) parts.push(`connected to ${related.join(', ')}`);
   return `Surfaced because of ${parts.join('; ')}.`;
@@ -1965,7 +1925,7 @@ function renderMemoryPanel(nodes) {
 }
 
 // Render user facts (global profile) as a collapsible section at the top of
-// the memory panel — below the graph nodes but always visible if facts exist.
+// the memory panel - below the graph nodes but always visible if facts exist.
 let _lastFactsJson = '';
 function renderUserFacts(facts) {
   if (!memoryPanel) return;
@@ -2000,10 +1960,8 @@ function renderUserFacts(facts) {
 
 chatInput.focus();
 
-// ════════════════════════════════════════
-// EMPTY STATE HELPERS
-// ════════════════════════════════════════
-function showEmptyState() { emptyState?.classList.add('visible'); }
+// // EMPTY STATE HELPERS
+// function showEmptyState() { emptyState?.classList.add('visible'); }
 function hideEmptyState() { emptyState?.classList.remove('visible'); }
 
 // Clear messages and re-attach the empty state element (innerHTML wipes it).
@@ -2029,10 +1987,8 @@ document.querySelectorAll('.qa-card').forEach(btn => {
   });
 });
 
-// ════════════════════════════════════════
-// CONTEXT WINDOW BAR
-// ════════════════════════════════════════
-function updateCtxBar(usage) {
+// // CONTEXT WINDOW BAR
+// function updateCtxBar(usage) {
   if (!ctxBarFill || !usage) return;
   const pct = Math.min(100, ((usage.prompt_tokens || 0) / 128000) * 100);
   ctxBarFill.style.width = pct + '%';
@@ -2040,19 +1996,15 @@ function updateCtxBar(usage) {
   ctxBarFill.classList.toggle('danger', pct > 80);
 }
 
-// ════════════════════════════════════════
-// REGENERATE — mark last assistant message
-// ════════════════════════════════════════
-function markLastAssistant() {
+// // REGENERATE - mark last assistant message
+// function markLastAssistant() {
   document.querySelectorAll('.message.assistant.last-msg').forEach(m => m.classList.remove('last-msg'));
   const all = document.querySelectorAll('.message.assistant');
   if (all.length) all[all.length - 1].classList.add('last-msg');
 }
 
-// ════════════════════════════════════════
-// CONVERSATION PERSISTENCE
-// ════════════════════════════════════════
-function saveConvsToStorage() {
+// // CONVERSATION PERSISTENCE
+// function saveConvsToStorage() {
   // Progressively trim until the write fits within localStorage quota.
   const attempts = [
     { convs: 60, msgs: 30 },
@@ -2082,10 +2034,8 @@ function loadConvsFromStorage() {
   } catch (_) {}
 }
 
-// ════════════════════════════════════════
-// CONVERSATION LIST HANDLERS (backend)
-// ════════════════════════════════════════
-function handleConversationList(backendConvs) {
+// // CONVERSATION LIST HANDLERS (backend)
+// function handleConversationList(backendConvs) {
   for (const bc of backendConvs) {
     const local = conversations.find(c => c.id === bc.id);
     if (local) {
@@ -2109,7 +2059,7 @@ function updateConvTitle(convId, title) {
   renderConvList();
   saveConvsToStorage();
   if (convId === currentConvId) chatTitle.textContent = title;
-  // No toast — title updates silently in the sidebar
+  // No toast - title updates silently in the sidebar
 }
 
 function handleConversationMessages(convId, messages) {
@@ -2123,10 +2073,8 @@ function handleConversationMessages(convId, messages) {
   if (conv) { conv.messages = messages.map(m => ({ role: m.role, content: m.content })); saveConvsToStorage(); }
 }
 
-// ════════════════════════════════════════
-// SIDEBAR CONVERSATION SEARCH
-// ════════════════════════════════════════
-let _searchTimer = null;
+// // SIDEBAR CONVERSATION SEARCH
+// let _searchTimer = null;
 sidebarSearch?.addEventListener('input', () => {
   clearTimeout(_searchTimer);
   _searchTimer = setTimeout(() => {
@@ -2142,10 +2090,8 @@ sidebarSearch?.addEventListener('input', () => {
   }, 200);
 });
 
-// ════════════════════════════════════════
-// TOAST NOTIFICATIONS
-// ════════════════════════════════════════
-function toast(msg, type = 'info', duration = 4000) {
+// // TOAST NOTIFICATIONS
+// function toast(msg, type = 'info', duration = 4000) {
   if (!toastContainer) return;
   const el = document.createElement('div');
   el.className = `toast toast-${type}`;
@@ -2160,10 +2106,8 @@ function dismissToast(el) {
   setTimeout(() => el.remove(), 220);
 }
 
-// ════════════════════════════════════════
-// CONFIRM MODAL
-// ════════════════════════════════════════
-let _confirmResolve = null;
+// // CONFIRM MODAL
+// let _confirmResolve = null;
 
 (function initConfirmModal() {
   const modal     = document.getElementById('confirm-modal');
@@ -2200,10 +2144,8 @@ function showConfirmModal({ title = 'Are you sure?', body = '', okLabel = 'Delet
   });
 }
 
-// ════════════════════════════════════════
-// COMMAND PALETTE  (Ctrl+K)
-// ════════════════════════════════════════
-const CMD_ITEMS = [
+// // COMMAND PALETTE  (Ctrl+K)
+// const CMD_ITEMS = [
   { name: 'New chat',            desc: 'Start a fresh conversation',       kbd: 'Ctrl+N', action: () => btnNewChat.click() },
   { name: 'Memory',              desc: 'Browse the memory graph',           kbd: 'Ctrl+/', action: () => switchPage('memory') },
   { name: 'Settings',            desc: 'API keys and configuration',        action: () => switchPage('settings') },
@@ -2274,15 +2216,11 @@ cmdInput?.addEventListener('keydown', (e) => {
 });
 cmdPaletteOverlay?.addEventListener('click', (e) => { if (e.target === cmdPaletteOverlay) closePalette(); });
 
-// ════════════════════════════════════════
-// TRAY INTEGRATION
-// ════════════════════════════════════════
-api.onTrayNewChat?.(() => btnNewChat.click());
+// // TRAY INTEGRATION
+// api.onTrayNewChat?.(() => btnNewChat.click());
 
-// ════════════════════════════════════════
-// FILE DRAG-AND-DROP
-// ════════════════════════════════════════
-const chatMain = document.getElementById('chat-main');
+// // FILE DRAG-AND-DROP
+// const chatMain = document.getElementById('chat-main');
 
 chatMain?.addEventListener('dragover', (e) => {
   e.preventDefault();
@@ -2330,10 +2268,8 @@ chatMain?.addEventListener('drop', async (e) => {
   }
 });
 
-// ════════════════════════════════════════
-// IMAGE PASTE & ATTACH
-// ════════════════════════════════════════
-let pendingImages = []; // [{name, dataUrl}]
+// // IMAGE PASTE & ATTACH
+// let pendingImages = []; // [{name, dataUrl}]
 const imgAttachStrip = document.getElementById('img-attach-strip');
 const fileInput      = document.getElementById('file-input');
 const btnAttach      = document.getElementById('btn-attach');
@@ -2406,10 +2342,8 @@ fileInput?.addEventListener('change', async () => {
 
 // Desktop notifications are handled inside setStreaming() directly (see above).
 
-// ════════════════════════════════════════
-// PIN / STAR CONVERSATIONS
-// ════════════════════════════════════════
-// renderConvList already exists — we extend it to show star button + pinned section
+// // PIN / STAR CONVERSATIONS
+// // renderConvList already exists - we extend it to show star button + pinned section
 
 function renderConvList(list) {
   const src = list || conversations;
@@ -2556,10 +2490,8 @@ function renderConvList(list) {
 // Handle backend pin ack (update pinned state from server)
 // (The ConversationPinned response is handled in the backend message handler below)
 
-// ════════════════════════════════════════
-// AUTO-START SETTING
-// ════════════════════════════════════════
-const toggleAutostart = document.getElementById('s-autostart');
+// // AUTO-START SETTING
+// const toggleAutostart = document.getElementById('s-autostart');
 if (toggleAutostart) {
   // Get current state
   api.getLoginItem?.().then(enabled => { toggleAutostart.checked = !!enabled; }).catch(() => {});
@@ -2570,20 +2502,16 @@ if (toggleAutostart) {
   });
 }
 
-// ════════════════════════════════════════
-// KEYBOARD SHORTCUT: Ctrl+, → Settings
-// ════════════════════════════════════════
-document.addEventListener('keydown', (e) => {
+// // KEYBOARD SHORTCUT: Ctrl+, → Settings
+// document.addEventListener('keydown', (e) => {
   if ((e.ctrlKey || e.metaKey) && e.key === ',') {
     e.preventDefault();
     switchPage('settings');
   }
 });
 
-// ════════════════════════════════════════
-// PROMPT TEMPLATES  (type / in empty input)
-// ════════════════════════════════════════
-const TEMPLATES = [
+// // PROMPT TEMPLATES  (type / in empty input)
+// const TEMPLATES = [
   { trigger: '/explain',  label: 'Explain code',      text: 'Please explain the following code:\n\n```\n\n```' },
   { trigger: '/debug',    label: 'Debug error',        text: 'I\'m getting this error:\n\n```\n\n```\n\nPlease help me fix it.' },
   { trigger: '/tests',    label: 'Write tests',        text: 'Write comprehensive unit tests for:\n\n```\n\n```' },
@@ -2643,10 +2571,8 @@ chatInput?.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && templateMenu) { e.stopPropagation(); hideTemplateMenu(); }
 });
 
-// ════════════════════════════════════════
-// CONVERSATION CONTEXT MENU
-// ════════════════════════════════════════
-let _ctxMenu = null;
+// // CONVERSATION CONTEXT MENU
+// let _ctxMenu = null;
 
 function closeConvContextMenu() {
   _ctxMenu?.remove();
@@ -2719,10 +2645,8 @@ document.addEventListener('click',       closeConvContextMenu, true);
 document.addEventListener('contextmenu', (e) => { if (!e.target.closest('.conv-ctx-menu')) closeConvContextMenu(); }, true);
 document.addEventListener('keydown',     (e) => { if (e.key === 'Escape') closeConvContextMenu(); }, true);
 
-// ════════════════════════════════════════
-// EDIT USER MESSAGE + RESEND
-// ════════════════════════════════════════
-function startEditUserMessage(wrap, bub, originalText) {
+// // EDIT USER MESSAGE + RESEND
+// function startEditUserMessage(wrap, bub, originalText) {
   if (streaming) return;
 
   const textarea = document.createElement('textarea');
@@ -2799,10 +2723,8 @@ function startEditUserMessage(wrap, bub, originalText) {
   });
 }
 
-// ════════════════════════════════════════
-// SETTINGS: system prompt + sliders
-// ════════════════════════════════════════
-(function initChatSettings() {
+// // SETTINGS: system prompt + sliders
+// (function initChatSettings() {
   const sysPromptEl  = document.getElementById('s-system-prompt');
   const tempEl       = document.getElementById('s-temperature');
   const tempNumEl    = document.getElementById('s-temperature-num');
@@ -2831,7 +2753,7 @@ function startEditUserMessage(wrap, bub, originalText) {
 
   sysPromptEl?.addEventListener('input', saveChatSettings);
 
-  // Temperature — slider drives number input and vice versa
+  // Temperature - slider drives number input and vice versa
   tempEl?.addEventListener('input', () => {
     const v = parseFloat(tempEl.value).toFixed(2);
     if (tempNumEl) tempNumEl.value = v;
@@ -2850,7 +2772,7 @@ function startEditUserMessage(wrap, bub, originalText) {
     saveChatSettings();
   });
 
-  // Max tokens — slider drives number input and vice versa
+  // Max tokens - slider drives number input and vice versa
   maxTokEl?.addEventListener('input', () => {
     if (maxTokNumEl) maxTokNumEl.value = maxTokEl.value;
     saveChatSettings();
@@ -2868,10 +2790,8 @@ function startEditUserMessage(wrap, bub, originalText) {
   });
 })();
 
-// ════════════════════════════════════════
-// SIDEBAR KEYBOARD NAVIGATION
-// ════════════════════════════════════════
-(function initSidebarKeyNav() {
+// // SIDEBAR KEYBOARD NAVIGATION
+// (function initSidebarKeyNav() {
   let kbIdx = -1;
 
   function getItems() {
@@ -2911,10 +2831,8 @@ function startEditUserMessage(wrap, bub, originalText) {
   convList.addEventListener('click', () => { kbIdx = -1; convList.querySelectorAll('.kb-focus').forEach(l => l.classList.remove('kb-focus')); });
 })();
 
-// ════════════════════════════════════════
-// FOLDER INDEX BUTTON
-// ════════════════════════════════════════
-document.getElementById('btn-index-folder')?.addEventListener('click', async () => {
+// // FOLDER INDEX BUTTON
+// document.getElementById('btn-index-folder')?.addEventListener('click', async () => {
   const folder = await api.pickFolder?.();
   if (!folder) return;
   const name = folder.split(/[\\/]/).filter(Boolean).pop() || folder;
@@ -3015,12 +2933,12 @@ function handleScheduledTaskList(msg) {
   }
   const lines = tasks.map(t => {
     const when = new Date((t.next_run_at || 0) * 1000).toLocaleString();
-    return `• **${t.name}** (\`${t.id.slice(0,8)}\`) — ${t.cadence} — next ${when} — ${t.status}`;
+    return `• **${t.name}** (\`${t.id.slice(0,8)}\`) - ${t.cadence} - next ${when} - ${t.status}`;
   });
   appendMessage('assistant', `Scheduled tasks:\n${lines.join('\n')}`);
 }
 
 function handleScheduledTaskAction(msg) {
   const prefix = msg.success ? '' : 'fail: ';
-  appendMessage('assistant', `${prefix}${msg.action} — ${msg.message}`);
+  appendMessage('assistant', `${prefix}${msg.action} - ${msg.message}`);
 }

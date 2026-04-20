@@ -105,9 +105,9 @@ impl EmbeddingMemory {
         embedding_type: Option<EmbeddingType>,
         limit: usize,
     ) -> Result<Vec<(EmbeddingRecord, f32)>> {
-        // Nothing to search against — bail early rather than scoring everything 0.0.
+        // Nothing to search against - bail early rather than scoring everything 0.0.
         if query_vector.is_empty() {
-            warn!("search_similar: query_vector is empty — embedding model may have failed; skipping semantic search");
+            warn!("search_similar: query_vector is empty - embedding model may have failed; skipping semantic search");
             return Ok(vec![]);
         }
         let dim = query_vector.len() as i64;

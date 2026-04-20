@@ -25,7 +25,7 @@ pub fn dispatch(channel: &str, title: &str, body: &str) {
         // tg/email hooks go here later
         other => {
             warn!(
-                "unknown output channel {:?} — falling back to notification",
+                "unknown output channel {:?} - falling back to notification",
                 other
             );
             notify(title, body);

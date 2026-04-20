@@ -75,7 +75,7 @@ pub fn preview_messages(messages: &[crate::llm::types::Message]) -> Vec<PromptPr
 }
 
 /// Append one JSON-line record to error.log. Errors during logging are
-/// swallowed silently — we never want logging to take down the main path.
+/// swallowed silently - we never want logging to take down the main path.
 pub fn record(ctx: ErrorContext<'_>) {
     let timestamp = chrono_rfc3339();
     let rec = Record {

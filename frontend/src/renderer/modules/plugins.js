@@ -1,7 +1,7 @@
-// ── Plugin browse, cards, modal, search, installed ────────────────────────────
+// Plugin browse, cards, modal, search, installed 
 import { esc, uid } from './util.js';
 
-// ── Deps injected by initPlugins() ───────────────────────────────────────────
+// Deps injected by initPlugins() 
 let _api, _appendMessage, _switchPage, _toast;
 
 export function initPlugins({ api, appendMessage, switchPage, toast }) {
@@ -12,7 +12,7 @@ export function initPlugins({ api, appendMessage, switchPage, toast }) {
   _attachListeners();
 }
 
-// ── Language color map ────────────────────────────────────────────────────────
+// Language color map 
 export const LANG_COLORS = {
   TypeScript:'#3178c6', JavaScript:'#f7df1e', Python:'#3572A5', Rust:'#dea584',
   Go:'#00ADD8', Java:'#b07219', Ruby:'#701516', 'C#':'#178600', 'C++':'#f34b7d',
@@ -20,7 +20,7 @@ export const LANG_COLORS = {
   Dockerfile:'#384d54', HTML:'#e34c26', CSS:'#563d7c',
 };
 
-// ── Category detection ────────────────────────────────────────────────────────
+// Category detection 
 const CATEGORY_RULES = {
   'Browser/Web':    ['playwright','puppeteer','browser','web','scrape','crawl','selenium','screenshot','http','fetch'],
   'Database':       ['postgres','mysql','sqlite','mongodb','redis','neon','supabase','database','sql','db','turso','prisma','drizzle'],
@@ -47,13 +47,13 @@ export function detectCategory(plugin) {
   return 'Other';
 }
 
-// ── Browse state ──────────────────────────────────────────────────────────────
+// Browse state 
 export const browseState = { type: 'all', sort: 'stars', category: 'all', page: 1, loading: false, hasMore: false, count: 0, allItems: [] };
 
-// ── Modal state ───────────────────────────────────────────────────────────────
+// Modal state 
 let pluginModal, modalClose, modalRepoBtn, modalInstallBtn, modalPlugin = null;
 
-// ── Install-poll state ────────────────────────────────────────────────────────
+// Install-poll state 
 const _installingPlugins = new Set();
 let _pollTimer = null;
 
@@ -120,7 +120,7 @@ function _attachListeners() {
   document.addEventListener('keydown', e => { if (e.key === 'Escape') closePluginModal(); });
 }
 
-// ── Browse ────────────────────────────────────────────────────────────────────
+// Browse 
 export function renderBrowseFiltered() {
   const ul = document.getElementById('browse-list');
   ul.innerHTML = '';
@@ -130,7 +130,7 @@ export function renderBrowseFiltered() {
     : browseState.allItems.filter(p => detectCategory(p) === cat);
 
   if (!visible.length) {
-    ul.innerHTML = `<li class="grid-empty">No <strong>${cat === 'all' ? '' : cat + ' '}plugins</strong> in this batch — try loading more</li>`;
+    ul.innerHTML = `<li class="grid-empty">No <strong>${cat === 'all' ? '' : cat + ' '}plugins</strong> in this batch - try loading more</li>`;
   } else {
     for (const p of visible) ul.appendChild(makePluginCard(p));
   }
@@ -176,7 +176,7 @@ export function setBrowseStatus(msg) {
   document.getElementById('browse-status').textContent = msg;
 }
 
-// ── Plugin detail modal ───────────────────────────────────────────────────────
+// Plugin detail modal 
 export function openPluginModal(plugin) {
   modalPlugin = plugin;
 
@@ -222,7 +222,7 @@ export function closePluginModal() {
   modalPlugin = null;
 }
 
-// ── Search ────────────────────────────────────────────────────────────────────
+// Search 
 export async function searchPlugins() {
   const q = document.getElementById('plugin-query').value.trim();
   if (!q) return;
@@ -242,7 +242,7 @@ export async function searchPlugins() {
   }
 }
 
-// ── Installed plugins ─────────────────────────────────────────────────────────
+// Installed plugins 
 export function loadPluginsInstalled() { _api.send({ type: 'list_plugins', id: uid() }); }
 
 export function handlePluginList(msg) {
@@ -302,14 +302,14 @@ function _refreshCardInstallButtons() {
   });
 }
 
-// ── Plugin cards ──────────────────────────────────────────────────────────────
+// Plugin cards 
 export function makePluginCard(p) {
   const li    = document.createElement('li');
   const isMcp = p.plugin_type === 'mcp';
   const cat   = detectCategory(p);
   li.className = `plugin-card ${isMcp ? 'mcp-card' : 'skill-card'}`;
 
-  // ── Header: avatar + name/owner + type badge ──────────────────────────────
+ // Header: avatar + name/owner + type badge 
   const header = document.createElement('div');
   header.className = 'pc-header';
 
@@ -352,12 +352,12 @@ export function makePluginCard(p) {
   header.appendChild(meta);
   header.appendChild(typeBadge);
 
-  // ── Description ───────────────────────────────────────────────────────────
+ // Description 
   const desc = document.createElement('p');
   desc.className = 'pc-desc';
   desc.textContent = p.description || 'No description available.';
 
-  // ── Footer: cat + lang + stars | install ──────────────────────────────────
+ // Footer: cat + lang + stars | install 
   const footer = document.createElement('div');
   footer.className = 'pc-footer';
 
@@ -492,7 +492,7 @@ export function handlePluginAction2(action, pluginId, pluginData = null) {
         msg.plugin_type               = pluginData.plugin_type || 'mcp';
         if (pluginData.repo_url)      msg.repo_url    = pluginData.repo_url;
         // Browse-list plugins use id = "owner/repo" (full_name) but don't set
-        // owner/repo as separate fields — derive them from full_name or id.
+        // owner/repo as separate fields - derive them from full_name or id.
         const fullName = pluginData.full_name || pluginData.id || '';
         const [derivedOwner, derivedRepo] = fullName.split('/');
         msg.owner = pluginData.owner || derivedOwner || '';
@@ -518,7 +518,7 @@ export function handlePluginAction(msg) {
     loadPluginsInstalled();
     _toast(msg.message || `Plugin ${msg.action} started`, 'info');
     if (msg.action === 'install') _startInstallPoll(msg.plugin_id);
-    // Spawn is async — refresh again after 1.5s so running state reflects reality
+    // Spawn is async - refresh again after 1.5s so running state reflects reality
     if (msg.action === 'start_mcp' || msg.action === 'stop_mcp') {
       setTimeout(loadPluginsInstalled, 1500);
     }

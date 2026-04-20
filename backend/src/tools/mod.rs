@@ -60,17 +60,17 @@ pub(crate) fn validate_write_path(path: &str) -> anyhow::Result<PathBuf> {
     for prefix in blocked {
         if abs_str.contains(prefix) {
             anyhow::bail!(
-                "Write to '{}' blocked — system directory. Move to a project directory first.",
+                "Write to '{}' blocked - system directory. Move to a project directory first.",
                 path
             );
         }
     }
 
-    // Reject symlinks — prevent following them to protected locations
+    // Reject symlinks - prevent following them to protected locations
     if abs.exists() {
         if let Ok(meta) = std::fs::symlink_metadata(&abs) {
             if meta.file_type().is_symlink() {
-                anyhow::bail!("Write to '{}' blocked — target is a symbolic link.", path);
+                anyhow::bail!("Write to '{}' blocked - target is a symbolic link.", path);
             }
         }
     }
@@ -83,7 +83,7 @@ pub(crate) fn validate_write_path(path: &str) -> anyhow::Result<PathBuf> {
             if let Ok(m) = std::fs::symlink_metadata(ancestor) {
                 if m.file_type().is_symlink() {
                     anyhow::bail!(
-                        "Write to '{}' blocked — path contains a symbolic link at '{}'.",
+                        "Write to '{}' blocked - path contains a symbolic link at '{}'.",
                         path,
                         ancestor.display(),
                     );

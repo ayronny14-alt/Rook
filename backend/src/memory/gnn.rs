@@ -9,10 +9,12 @@ use uuid::Uuid;
 
 use crate::memory::storage::MemoryStorage;
 
+// thresholds below which training is pointless. feel free to tune, but
+// going lower than this mostly teaches the model to memorize 4 nodes.
 const DEFAULT_MIN_GNN_NODES: i64 = 25;
 const DEFAULT_MIN_GNN_EDGES: i64 = 16;
 const DEFAULT_MIN_GNN_EMBEDDINGS: i64 = 20;
-const DEFAULT_BATCH_TRAIN_INTERVAL_SECS: i64 = 20 * 60;
+const DEFAULT_BATCH_TRAIN_INTERVAL_SECS: i64 = 20 * 60; // 20min. GPU isn't free.
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GraphTrainingStats {
@@ -760,7 +762,7 @@ mod tests {
         let _ = std::fs::remove_file(&artifact_path);
     }
 
-    /// The full async path — storage → apply_artifact_updates → DB writes.
+    /// The full async path - storage → apply_artifact_updates → DB writes.
     /// Validates that confidences are persisted into node metadata and that
     /// the training_jobs row is marked 'idle' on success.
     #[tokio::test]

@@ -1,6 +1,7 @@
 pub mod context;
 pub mod distiller;
 pub mod embedding;
+pub mod extractor;
 pub mod feedback;
 pub mod gnn;
 pub mod graph;

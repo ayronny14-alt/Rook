@@ -138,7 +138,7 @@ pub async fn auto_title_if_ready(
         .flatten()
     });
     if let Some(ref t) = existing_title {
-        // A "real" title has been set already — skip
+        // A "real" title has been set already - skip
         if t.chars().count() < 60 && !t.is_empty() && user_count > 2 {
             return None;
         }
@@ -173,7 +173,7 @@ pub async fn auto_title_if_ready(
     );
 
     let messages = vec![crate::llm::types::Message::text("user", prompt)];
-    // Auto-title is a 6-word summarisation — use whichever cheap model the provider serves.
+    // Auto-title is a 6-word summarisation - use whichever cheap model the provider serves.
     let cheap = llm.cheapest_model().await;
     let title = match llm.chat_with_model_override(messages, &cheap, 64).await {
         Ok(resp) => {
@@ -183,7 +183,7 @@ pub async fn auto_title_if_ready(
                 .next()
                 .and_then(|c| c.message.text_content())
                 .unwrap_or_default();
-            // Model may echo the prompt or include "Title: <answer>" — extract just the answer.
+            // Model may echo the prompt or include "Title: <answer>" - extract just the answer.
             // 1. If "Title:" appears, take everything after the last occurrence.
             // 2. Take only the first non-empty line (strips any prompt echo above).
             // 3. Strip quotes and whitespace, cap at 60 chars.

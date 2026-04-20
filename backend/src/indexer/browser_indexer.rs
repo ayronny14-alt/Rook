@@ -92,7 +92,7 @@ impl BrowserIndexer {
     }
 }
 
-/// Deterministic L2-normalised hash embedding — the same algorithm used by
+/// Deterministic L2-normalised hash embedding - the same algorithm used by
 /// `FileIndexer` so all indexed content shares a compatible vector space.
 fn hash_embedding(text: &str, dims: usize) -> Vec<f32> {
     let mut values = vec![0.0_f32; dims];

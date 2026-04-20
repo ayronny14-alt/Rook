@@ -5,7 +5,7 @@ use tracing::{debug, warn};
 
 use super::registry::{plugin_from_github, Plugin, PluginType};
 
-// ── Canonical topic lists ──────────────────────────────────────────────────
+// Canonical topic lists 
 
 const MCP_TOPICS: &[&str] = &[
     "mcp-server",
@@ -16,14 +16,14 @@ const MCP_TOPICS: &[&str] = &[
 const SKILL_TOPICS: &[&str] = &[
     "rook-skill",
     "agent-skill",
-    // Ecosystem-compatible topics — these repos work with Rook too.
+    // Ecosystem-compatible topics - these repos work with Rook too.
     "claude-skill",
     "anthropic-skill",
 ];
 
 const CONNECTOR_TOPICS: &[&str] = &[
     "rook-connector",
-    // Ecosystem-compatible topics — these connectors are protocol-compatible.
+    // Ecosystem-compatible topics - these connectors are protocol-compatible.
     "claude-connector",
     "anthropic-connector",
 ];
@@ -36,7 +36,7 @@ fn canonical_topics(ptype: &PluginType) -> &'static [&'static str] {
     }
 }
 
-// ── GitHub API response shapes ─────────────────────────────────────────────
+// GitHub API response shapes 
 
 #[derive(Debug, Deserialize)]
 struct SearchResponse {
@@ -65,7 +65,7 @@ struct ContentResponse {
     content: Option<String>, // base64-encoded
 }
 
-// ── Public surface ─────────────────────────────────────────────────────────
+// Public surface 
 
 // Performs GitHub repository searches across the canonical topics for each
 pub async fn search_github(query: &str, token: Option<&str>) -> Result<Vec<Plugin>> {
@@ -74,7 +74,7 @@ pub async fn search_github(query: &str, token: Option<&str>) -> Result<Vec<Plugi
     let mut results: Vec<Plugin> = Vec::new();
 
     // Run one search per canonical topic across all plugin types. This yields
-    // between 7 and 10 search requests — still inside GitHub's 10/min
+    // between 7 and 10 search requests - still inside GitHub's 10/min
     // unauth'd rate limit for a single user action, and well inside the
     // 30/min authenticated limit.
     let types = [PluginType::Mcp, PluginType::Skill, PluginType::Connector];
@@ -150,7 +150,7 @@ pub async fn fetch_repo_tree(
     Ok(resp.tree.into_iter().map(|e| e.path).collect())
 }
 
-// ── Private helpers ────────────────────────────────────────────────────────
+// Private helpers 
 
 fn build_client(token: Option<&str>) -> Result<reqwest::Client> {
     let mut headers = reqwest::header::HeaderMap::new();
@@ -195,7 +195,7 @@ async fn search_repos(
     let body: SearchResponse = resp.json().await.context("GitHub JSON parse")?;
     let mut out = Vec::new();
     for item in body.items {
-        // ─── Strict filter
+ // Strict filter
         let topics = item.topics.as_deref().unwrap_or(&[]);
         let has_canonical = topics.iter().any(|t| {
             let t = t.to_ascii_lowercase();
@@ -231,7 +231,7 @@ async fn search_repos(
     Ok(out)
 }
 
-/// Minimal base64 decode (avoids adding a heavy dependency — re-uses the
+/// Minimal base64 decode (avoids adding a heavy dependency - re-uses the
 /// base64 crate already present in Cargo.toml).
 fn base64_decode(s: &str) -> Option<Vec<u8>> {
     use base64::Engine;

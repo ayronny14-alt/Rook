@@ -68,7 +68,7 @@ pub async fn handle_create_scheduled_task(
             action: "create".to_string(),
             success: true,
             message: format!(
-                "scheduled '{}' — next run at {}",
+                "scheduled '{}' - next run at {}",
                 task.name, task.next_run_at
             ),
         }),

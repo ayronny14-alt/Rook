@@ -5,7 +5,7 @@ use super::HandlerCtx;
 use crate::ipc::protocol::IPCResponse;
 
 pub async fn handle_graceful_shutdown(_ctx: &HandlerCtx, id: &str) -> Result<IPCResponse> {
-    info!("Graceful shutdown requested via IPC — flushing WAL");
+    info!("Graceful shutdown requested via IPC - flushing WAL");
     // WAL checkpoint + flush. Best-effort; if it fails we allow extra drain time.
     let wal_ok = _ctx
         .memory
@@ -19,7 +19,7 @@ pub async fn handle_graceful_shutdown(_ctx: &HandlerCtx, id: &str) -> Result<IPC
     if wal_ok {
         info!("WAL checkpoint succeeded");
     } else {
-        info!("WAL checkpoint failed or skipped — allowing extra drain time");
+        info!("WAL checkpoint failed or skipped - allowing extra drain time");
     }
     // Schedule process exit after returning the response. Give more time if flush failed.
     tokio::spawn(async move {

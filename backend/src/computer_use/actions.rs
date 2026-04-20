@@ -9,7 +9,7 @@ use super::uia::element_for_id;
 pub fn click(element_id: &str) -> Result<()> {
     let el = element_for_id(element_id).ok_or_else(|| {
         anyhow!(
-            "unknown element id {:?} — did you snapshot first?",
+            "unknown element id {:?} - did you snapshot first?",
             element_id
         )
     })?;
@@ -25,7 +25,7 @@ pub fn click(element_id: &str) -> Result<()> {
 pub fn type_text(element_id: &str, text: &str) -> Result<()> {
     let el = element_for_id(element_id).ok_or_else(|| {
         anyhow!(
-            "unknown element id {:?} — did you snapshot first?",
+            "unknown element id {:?} - did you snapshot first?",
             element_id
         )
     })?;

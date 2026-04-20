@@ -48,7 +48,7 @@ impl ObjectMemoryStore {
 
         let conn = self.storage.get_connection().unwrap();
         // access_count is omitted from ON CONFLICT UPDATE so it is only
-        // ever incremented by touch_accessed() — upserts never reset it.
+        // ever incremented by touch_accessed() - upserts never reset it.
         conn.execute(
             "INSERT INTO object_memory (id, node_id, summary, key_facts_json, extracted_structure, code_signatures, todos_json, ui_snapshot_json, tags_json, content_hash, last_indexed, access_count)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)

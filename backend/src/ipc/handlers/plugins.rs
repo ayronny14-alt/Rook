@@ -84,7 +84,7 @@ pub async fn handle_install_plugin(
     repo: Option<&str>,
     stars: Option<i64>,
 ) -> Result<IPCResponse> {
-    // Resolve plugin — look up by id, or upsert from inline data if not yet registered.
+    // Resolve plugin - look up by id, or upsert from inline data if not yet registered.
     let plugin = match ctx.plugin_registry.get(plugin_id)? {
         Some(p) => p,
         None => {
@@ -93,7 +93,7 @@ pub async fn handle_install_plugin(
             // metadata we can upsert them on the fly before installing.
             match (repo_url, name) {
                 (Some(rurl), Some(pname)) => {
-                    // owner/repo may not be explicit — parse from id (often "owner/repo").
+                    // owner/repo may not be explicit - parse from id (often "owner/repo").
                     let (resolved_owner, resolved_repo) = {
                         let o = owner.unwrap_or("");
                         let r = repo.unwrap_or("");
@@ -363,7 +363,7 @@ pub async fn handle_update_config(
     if let Ok(mut guard) = ctx.config_override.lock() {
         *guard = Some(cfg.clone());
     }
-    // survive backend restarts — write to %LOCALAPPDATA%\Rook\config.json
+    // survive backend restarts - write to %LOCALAPPDATA%\Rook\config.json
     if let Err(e) = persist_config(&cfg) {
         warn!("failed to persist config: {}", e);
     }

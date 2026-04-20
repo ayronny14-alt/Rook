@@ -79,7 +79,7 @@ async fn run_distill(
 
     let prompt = format!(
         r#"Extract long-term facts from this conversation exchange.
-Return ONLY valid JSON — no markdown, no explanation:
+Return ONLY valid JSON - no markdown, no explanation:
 {{
   "user_facts": [{{"key": "...", "value": "..."}}],
   "memory_facts": [{{"title": "...", "content": "...", "category": "..."}}]
@@ -91,7 +91,7 @@ RULES:
   food preferences, dietary restrictions, hobbies, interests, sports, pets, favourite
   music/movies/games, recurring tools, deployment targets, team structure, project name,
   productivity habits, anything the user says they like, dislike, prefer, or use regularly.
-- memory_facts: technical or project knowledge — decisions made, bugs found/fixed, config
+- memory_facts: technical or project knowledge - decisions made, bugs found/fixed, config
   values, architecture facts, API details, patterns established, discovered constraints,
   commands that work, gotchas learned.
 - Only extract things explicitly stated. Do NOT infer or assume.
@@ -116,7 +116,7 @@ Assistant: {assistant}"#,
         Ok(r) => r,
         Err(e) => {
             if !e.to_string().contains("Not signed in") {
-                warn!("Distiller: LLM call failed ({}) — {}", cheap, e);
+                warn!("Distiller: LLM call failed ({}) - {}", cheap, e);
             }
             return;
         }
@@ -144,7 +144,7 @@ Assistant: {assistant}"#,
         Ok(v) => v,
         Err(e) => {
             warn!(
-                "Distiller: JSON parse failed — {} | raw snippet: {}",
+                "Distiller: JSON parse failed - {} | raw snippet: {}",
                 e,
                 &raw[..raw.len().min(300)]
             );
@@ -165,7 +165,7 @@ fn persist_user_facts(memory: &MemoryStorage, parsed: &serde_json::Value) {
     let conn = match memory.get_connection() {
         Ok(c) => c,
         Err(e) => {
-            warn!("Distiller: DB connection failed — {}", e);
+            warn!("Distiller: DB connection failed - {}", e);
             return;
         }
     };
@@ -309,7 +309,7 @@ async fn persist_memory_facts(llm: &LLMClient, memory: &MemoryStorage, parsed: &
             match graph.create_node(crate::memory::graph::NodeType::Concept, &title, Some(meta)) {
                 Ok(n) => n,
                 Err(e) => {
-                    warn!("Distiller: node create failed — {}", e);
+                    warn!("Distiller: node create failed - {}", e);
                     continue;
                 }
             }

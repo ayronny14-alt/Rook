@@ -135,7 +135,7 @@ pub fn get_snapshot(conv_id: &str, path: &str) -> Option<String> {
         .and_then(|m| m.get(&(conv_id.to_string(), abs))?.first().cloned())
 }
 
-/// Pop the most recent snapshot (for file_undo — restores and removes from stack).
+/// Pop the most recent snapshot (for file_undo - restores and removes from stack).
 pub fn pop_snapshot(conv_id: &str, path: &str) -> Option<String> {
     let abs = std::fs::canonicalize(path)
         .map(|p| p.display().to_string())
@@ -158,7 +158,7 @@ pub fn undo_depth(conv_id: &str, path: &str) -> usize {
         .unwrap_or(0)
 }
 
-/// Get a public snapshot of the todos for a conversation — used by the UI to
+/// Get a public snapshot of the todos for a conversation - used by the UI to
 /// render a live task list in the memory panel.
 pub fn get_session_todos_json(conv_id: &str) -> Vec<serde_json::Value> {
     let map = session_todos().lock().ok();
@@ -225,7 +225,7 @@ pub async fn handle_chat(
     // Load prior conversation turns with a rolling-window strategy:
     //   • last 12 turns verbatim (immediate context)
     //   • older turns collapsed into a single extractive digest system message
-    //     (pointers only — the model can call `search_memory` for detail)
+    //     (pointers only - the model can call `search_memory` for detail)
     // Bounded at ~2k tokens regardless of conversation length.
     const RECENT_TURNS: usize = 12;
     const DIGEST_CHAR_LIMIT: usize = 1800;
@@ -259,7 +259,7 @@ pub async fn handle_chat(
             let mut kept: Vec<(String, String)> = Vec::new();
             if !older.is_empty() {
                 let mut digest = String::from(
-                    "Earlier in this conversation (digest — call search_memory for detail):\n",
+                    "Earlier in this conversation (digest - call search_memory for detail):\n",
                 );
                 for (role, content) in older.iter() {
                     let snippet: String = content
@@ -337,10 +337,10 @@ pub async fn handle_chat(
     let is_trivial = word_count <= 3 && char_count <= 20;
 
     let (curated_context, curated_struct) = if is_trivial {
-        tracing::debug!("trivial message — skipping RAG index hint");
+        tracing::debug!("trivial message - skipping RAG index hint");
         (None, None)
     } else {
-        // Cheap top-K title query — no content, no summaries, no LLM summarization.
+        // Cheap top-K title query - no content, no summaries, no LLM summarization.
         // Budget: ~150 tokens total for the hint block.
         let curator = if ctx.gnn_available {
             crate::memory::context::ContextCurator::new(ctx.memory.clone())
@@ -354,7 +354,7 @@ pub async fn handle_chat(
             Ok(items) if !items.is_empty() => {
                 // Titles-only index hint. Keep under ~150 tokens.
                 let mut hint = String::from(
-                    "Memory index (titles only — call `search_memory` with a specific query for content):\n",
+                    "Memory index (titles only - call `search_memory` with a specific query for content):\n",
                 );
                 for (i, item) in items.iter().take(5).enumerate() {
                     let title = item.title.chars().take(80).collect::<String>();
@@ -439,7 +439,7 @@ pub async fn handle_chat(
                     break;
                 }
                 // Skip all leading system messages to preserve injected context/instructions.
-                // If nothing but system remains, stop — better an over-budget prompt than a
+                // If nothing but system remains, stop - better an over-budget prompt than a
                 // truncated instruction header.
                 let Some(remove_idx) = messages.iter().position(|m| m.role.as_str() != "system")
                 else {
@@ -624,7 +624,7 @@ pub async fn handle_chat(
     // IMPORTANT: many providers (Groq, Anthropic) count max_tokens against their
     // per-minute rate limit BEFORE generation. A default of 8192 eats ~8k of the
     // budget regardless of whether the model ends up using it. Cap per mode:
-    //   Chat/Assistant  → 2048  (most replies are 50–500 tokens)
+    //   Chat/Assistant  → 2048  (most replies are 50-500 tokens)
     //   Code/Coder      → 4096  (longer code blocks)
     //   Team            → 8192  (agent loops can need it)
     let default_mode = agent_mode.unwrap_or("Chat");
@@ -677,7 +677,7 @@ pub async fn handle_chat(
             messages.push(crate::llm::types::Message::text(
                 "system",
                 format!(
-                    "# User\n[{} facts stored — query with search_memory if needed]",
+                    "# User\n[{} facts stored - query with search_memory if needed]",
                     user_facts.len()
                 ),
             ));
@@ -763,11 +763,11 @@ async fn handle_chat_mode(
     _curated_struct: Option<serde_json::Value>,
     effective_llm: &LLMClient,
 ) -> Result<IPCResponse> {
-    let system_text = r#"You are Rook — a helpful assistant with long-term memory.
+    let system_text = r#"You are Rook - a helpful assistant with long-term memory.
 
 You have two memory tools you can call alongside your reply:
-• store_memory — save important context, decisions, or project details for future retrieval
-• store_user_fact — save/update a fact about the user (name, preferences, tools, etc.) in their global profile
+• store_memory - save important context, decisions, or project details for future retrieval
+• store_user_fact - save/update a fact about the user (name, preferences, tools, etc.) in their global profile
 
 Guidelines:
 • When the user shares personal info (name, preferences, etc.), store it with store_user_fact.
@@ -940,7 +940,7 @@ Guidelines:
             }
         }
         Ok(None) => {
-            // Mock mode — no streaming, do non-streaming fallback
+            // Mock mode - no streaming, do non-streaming fallback
             let response = effective_llm.chat(messages).await?;
             content = response
                 .choices
@@ -1002,16 +1002,16 @@ Guidelines:
     persist_assistant_message(&ctx.memory, conv_id, &content);
 
     if !content.is_empty() {
-        crate::memory::distiller::spawn_distill(
-            effective_llm.clone(),
-            ctx.memory.clone(),
-            message.to_string(),
-            content.clone(),
-        );
+        let mem = ctx.memory.clone();
+        let um = message.to_string();
+        let ac = content.clone();
+        tokio::task::spawn_blocking(move || {
+            crate::memory::extractor::run(&mem, &um, &ac);
+        });
     }
 
     // Auto-title: fire-and-forget; only fires on 2nd user message.
-    // IMPORTANT: we must NOT hold a chunk_tx clone in this task after it's done —
+    // IMPORTANT: we must NOT hold a chunk_tx clone in this task after it's done -
     // if the LLM call hangs, the forwarder task stays open and blocks the IPC server.
     // We drop tx immediately after sending (or on timeout) using a 12-second limit.
     {
@@ -1220,15 +1220,14 @@ async fn handle_coder_mode(
     }
 
     persist_assistant_message(&ctx.memory, conv_id, &content);
-    // Distill facts from coder exchanges — architectural decisions and discovered patterns
-    // are just as worth retaining as facts extracted from conversational chat.
+    // code-based fact extraction. regex, not vibes.
     if !content.is_empty() {
-        crate::memory::distiller::spawn_distill(
-            effective_llm.clone(),
-            ctx.memory.clone(),
-            user_message_for_distill,
-            content.clone(),
-        );
+        let mem = ctx.memory.clone();
+        let um = user_message_for_distill.clone();
+        let ac = content.clone();
+        tokio::task::spawn_blocking(move || {
+            crate::memory::extractor::run(&mem, &um, &ac);
+        });
     }
     Ok(IPCResponse::Chat {
         id: id.to_string(),
@@ -1258,7 +1257,7 @@ async fn handle_team_mode(
         .find(|m| m.role == "user")
         .map(|m| m.content.clone())
         .unwrap_or_default();
-    let system_text = r#"You are Rook — an autonomous software engineer agent.
+    let system_text = r#"You are Rook - an autonomous software engineer agent.
 
 FILES & NAV:  file_read, file_write, code_edit, file_diff, file_undo, list_files, change_dir, get_cwd
 SEARCH:       glob, grep, search_in_file, outline_file
@@ -1276,7 +1275,7 @@ ACT IMMEDIATELY. Use tools without narrating every step.
 • Shells: the default shell persists cwd across calls. Need a second one for a dev server? `shell_spawn` name="server", then `shell_exec` shell="server" run_in_background=true.
 • For long commands (>30s), use `run_in_background: true` and poll with `shell_read`.
 • Before editing a file, use `file_read` first so `file_undo` and `file_diff` work.
-• Call multiple independent tools in ONE response — they'll run in parallel.
+• Call multiple independent tools in ONE response - they'll run in parallel.
 • Finish with plain text (no trailing tool calls)."#;
     messages.insert(0, crate::llm::types::Message::text("system", system_text));
 
@@ -1287,7 +1286,7 @@ ACT IMMEDIATELY. Use tools without narrating every step.
         messages.insert(1, crate::llm::types::Message::text("system", &todos_text));
     }
 
-    // Inject curated memory context — lets Team mode start with prior project
+    // Inject curated memory context - lets Team mode start with prior project
     // knowledge instead of starting cold every session.
     if let Some(ref packet) = curated_struct {
         if let Some(mem_nodes) = packet.get("memory").and_then(|v| v.as_array()) {
@@ -1313,7 +1312,7 @@ ACT IMMEDIATELY. Use tools without narrating every step.
         }
     }
 
-    // User facts were already injected by handle_chat before dispatching here — no re-fetch.
+    // User facts were already injected by handle_chat before dispatching here - no re-fetch.
 
     // Tell the AI what its current working directory is at the start of every turn.
     let cwd_text = format!(
@@ -1344,7 +1343,7 @@ ACT IMMEDIATELY. Use tools without narrating every step.
             .send(IPCResponse::ChatChunk {
                 id: id.to_string(),
                 token: format!(
-                    "*note: tool calls disabled for `{}` — reasoning-only mode.*\n\n",
+                    "*note: tool calls disabled for `{}` - reasoning-only mode.*\n\n",
                     effective_model_name
                 ),
             })
@@ -1376,7 +1375,7 @@ ACT IMMEDIATELY. Use tools without narrating every step.
                 .chunk_tx
                 .send(IPCResponse::ChatChunk {
                     id: id.to_string(),
-                    token: "\n\n[Reached maximum tool iterations — stopping.]".to_string(),
+                    token: "\n\n[Reached maximum tool iterations - stopping.]".to_string(),
                 })
                 .await;
             break;
@@ -1455,7 +1454,7 @@ ACT IMMEDIATELY. Use tools without narrating every step.
                                         if !thought.is_empty() { reasoning_buf.push_str(thought); }
                                     }
 
-                                    // Content deltas — stream to UI immediately
+                                    // Content deltas - stream to UI immediately
                                     if let Some(token) = delta.and_then(|d| d.content.as_ref()) {
                                         if !token.is_empty() {
                                             if !thinking_emitted && !reasoning_buf.is_empty() {
@@ -1472,7 +1471,7 @@ ACT IMMEDIATELY. Use tools without narrating every step.
                                         }
                                     }
 
-                                    // Tool call deltas — accumulate fragments
+                                    // Tool call deltas - accumulate fragments
                                     if let Some(tcs) = delta.and_then(|d| d.tool_calls.as_ref()) {
                                         for tc_delta in tcs {
                                             let idx = tc_delta.index;
@@ -1602,7 +1601,7 @@ ACT IMMEDIATELY. Use tools without narrating every step.
             });
         }
 
-        // Stream any non-streamed content (mock mode / fallback only — SSE already sent tokens)
+        // Stream any non-streamed content (mock mode / fallback only - SSE already sent tokens)
         if !content.is_empty() && !content_streamed {
             for word in content.split_inclusive(char::is_whitespace) {
                 let _ = ctx
@@ -1692,7 +1691,7 @@ ACT IMMEDIATELY. Use tools without narrating every step.
 
             let tc_id = tc.id.clone();
 
-            // todo_write runs inline — mutates session state, tiny, no point
+            // todo_write runs inline - mutates session state, tiny, no point
             // in async indirection.
             if name == "todo_write" {
                 let result = {
@@ -1809,7 +1808,7 @@ ACT IMMEDIATELY. Use tools without narrating every step.
 
             let result_trimmed = if result.len() > 12_000 {
                 format!(
-                    "{}...\n[truncated — {} bytes total]",
+                    "{}...\n[truncated - {} bytes total]",
                     &result[..12_000],
                     result.len()
                 )
@@ -1836,15 +1835,14 @@ ACT IMMEDIATELY. Use tools without narrating every step.
 
     persist_assistant_message(&ctx.memory, conv_id, &final_content);
 
-    // Distill from team mode — autonomous sessions surface the most valuable project
-    // decisions, architectural choices, and discovered gotchas worth persisting.
+    // code-based extraction from team mode exchanges.
     if !final_content.is_empty() && !user_message_for_distill.is_empty() {
-        crate::memory::distiller::spawn_distill(
-            effective_llm.clone(),
-            ctx.memory.clone(),
-            user_message_for_distill,
-            final_content.clone(),
-        );
+        let mem = ctx.memory.clone();
+        let um = user_message_for_distill.clone();
+        let ac = final_content.clone();
+        tokio::task::spawn_blocking(move || {
+            crate::memory::extractor::run(&mem, &um, &ac);
+        });
     }
 
     Ok(IPCResponse::ChatDone {
@@ -2119,7 +2117,7 @@ fn resolve_conv_path(conv_id: &str, path: &str) -> std::path::PathBuf {
     }
 }
 
-/// Built-in regex grep — walks files under `root`, applies regex, returns
+/// Built-in regex grep - walks files under `root`, applies regex, returns
 /// file paths / lines / counts.  Pure Rust, no external ripgrep needed.
 fn run_builtin_grep(
     root: &std::path::Path,
@@ -2200,7 +2198,7 @@ fn run_builtin_grep(
             }
         }
 
-        // Skip files larger than 4 MB — almost certainly binary or generated
+        // Skip files larger than 4 MB - almost certainly binary or generated
         if let Ok(meta) = path.metadata() {
             if meta.len() > 4 * 1024 * 1024 {
                 continue;
@@ -2699,7 +2697,7 @@ pub async fn execute_tool(
                     snapshot_file(conv_id, &abs_str);
                     auto_index_file(memory, conv_id, &abs_str, "read");
 
-                    // Check for uncommitted git changes to this file — prepend
+                    // Check for uncommitted git changes to this file - prepend
                     // the diff so the model sees what changed without needing to
                     // compare against stale indexed content.
                     let diff_prefix = git_diff_for_file(&abs_str);
@@ -2723,7 +2721,7 @@ pub async fn execute_tool(
                     }
                     if end < total {
                         out.push_str(&format!(
-                            "\n[file has {} lines total — pass offset/limit to read more]",
+                            "\n[file has {} lines total - pass offset/limit to read more]",
                             total
                         ));
                     }
@@ -2877,7 +2875,7 @@ pub async fn execute_tool(
                         }
                     });
                     format!(
-                        "Changed directory to: {} — indexing files for semantic search.",
+                        "Changed directory to: {} - indexing files for semantic search.",
                         p.display()
                     )
                 }
@@ -3634,7 +3632,7 @@ pub async fn execute_tool(
                         Err(e) => format!("schedule_task insert failed: {}", e),
                     }
                 }
-                Err(e) => format!("schedule_task: invalid cadence — {}", e),
+                Err(e) => format!("schedule_task: invalid cadence - {}", e),
             }
         }
         "list_schedules" => {
@@ -3752,11 +3750,11 @@ fn build_all_tools() -> Vec<crate::llm::types::ToolDefinition> {
         })),
 
         // -------- scheduler --------
-        tool("propose_schedule", "Propose a scheduled task for the user to approve. Use when you think Rook should wake up later and do something (e.g. 'every monday summarize PRs'). Cadence grammar: 'once YYYY-MM-DD HH:MM', 'in 2h', 'daily 09:00', 'weekly mon 09:00', 'every 15m', 'cron 0 9 * * 1'. Status starts as 'proposed' — user must approve before it fires.", serde_json::json!({
+        tool("propose_schedule", "Propose a scheduled task for the user to approve. Use when you think Rook should wake up later and do something (e.g. 'every monday summarize PRs'). Cadence grammar: 'once YYYY-MM-DD HH:MM', 'in 2h', 'daily 09:00', 'weekly mon 09:00', 'every 15m', 'cron 0 9 * * 1'. Status starts as 'proposed' - user must approve before it fires.", serde_json::json!({
             "type": "object",
             "properties": {
                 "name": {"type":"string","description":"Short human-readable name."},
-                "cadence": {"type":"string","description":"Cadence spec — see tool description."},
+                "cadence": {"type":"string","description":"Cadence spec - see tool description."},
                 "prompt": {"type":"string","description":"What Rook should do when the task fires."},
                 "output_channel": {"type":"string","enum":["notification","silent"],"description":"How to deliver the result. Default notification."},
                 "why": {"type":"string","description":"Short reason the task is useful. Shown to the user when they approve."}
@@ -3814,7 +3812,7 @@ fn build_all_tools() -> Vec<crate::llm::types::ToolDefinition> {
             },
             "required": ["pattern"]
         })),
-        tool("todo_write", "Create or update the task list. Use ONLY for complex tasks with 3+ distinct steps — NOT for simple or single-step work. Pass the COMPLETE list each time (replaces previous). Each item: { content (imperative), activeForm (present continuous), status (pending|in_progress|completed) }. Keep exactly ONE task in_progress. Mark completed IMMEDIATELY after finishing.", serde_json::json!({
+        tool("todo_write", "Create or update the task list. Use ONLY for complex tasks with 3+ distinct steps - NOT for simple or single-step work. Pass the COMPLETE list each time (replaces previous). Each item: { content (imperative), activeForm (present continuous), status (pending|in_progress|completed) }. Keep exactly ONE task in_progress. Mark completed IMMEDIATELY after finishing.", serde_json::json!({
             "type": "object",
             "properties": {
                 "todos": {
@@ -3928,14 +3926,14 @@ fn build_all_tools() -> Vec<crate::llm::types::ToolDefinition> {
             },
             "required": ["key","value"]
         })),
-        tool("shell_spawn", "Create a new named persistent shell (e.g. 'shell2', 'build', 'server'). The shell keeps its own cwd and env across multiple shell_exec calls. If a shell with the same name already exists, returns an error — kill it first with shell_kill. Use this when you need a SECOND shell separate from the default (e.g. running a dev server in the background while you work in another shell).", serde_json::json!({
+        tool("shell_spawn", "Create a new named persistent shell (e.g. 'shell2', 'build', 'server'). The shell keeps its own cwd and env across multiple shell_exec calls. If a shell with the same name already exists, returns an error - kill it first with shell_kill. Use this when you need a SECOND shell separate from the default (e.g. running a dev server in the background while you work in another shell).", serde_json::json!({
             "type": "object",
             "properties": {
                 "name": {"type":"string","description":"Shell name, e.g. 'shell2'"}
             },
             "required": ["name"]
         })),
-        tool("shell_exec", "Run a command in a specific named shell. cwd persists across calls. Set run_in_background=true for commands you want to keep running while you do other work (dev servers, log watchers, etc) — the tool returns immediately and you fetch output later with shell_read. Set timeout_secs for synchronous calls (default 45s).", serde_json::json!({
+        tool("shell_exec", "Run a command in a specific named shell. cwd persists across calls. Set run_in_background=true for commands you want to keep running while you do other work (dev servers, log watchers, etc) - the tool returns immediately and you fetch output later with shell_read. Set timeout_secs for synchronous calls (default 45s).", serde_json::json!({
             "type": "object",
             "properties": {
                 "shell": {"type":"string","description":"Shell name (default: 'default'). Auto-creates if missing."},
@@ -3963,7 +3961,7 @@ fn build_all_tools() -> Vec<crate::llm::types::ToolDefinition> {
             "type": "object",
             "properties": {}
         })),
-        tool("outline_file", "Return a symbolic outline of a source file — function names, class names, imports — with their line numbers. Much cheaper than file_read when you only need to understand a file's structure for navigation. Supports Rust, JS, TS, Python, Go.", serde_json::json!({
+        tool("outline_file", "Return a symbolic outline of a source file - function names, class names, imports - with their line numbers. Much cheaper than file_read when you only need to understand a file's structure for navigation. Supports Rust, JS, TS, Python, Go.", serde_json::json!({
             "type": "object",
             "properties": {
                 "path": {"type":"string","description":"Path to source file"}

@@ -190,7 +190,7 @@ impl ContextCurator {
                 + (self.weights.recency * recency_score)
                 + (self.weights.confidence * blended_confidence);
 
-            // ── Phase 2.3: apply feedback as a visible multiplicative modifier
+ // Phase 2.3: apply feedback as a visible multiplicative modifier
             let feedback_multiplier = (1.0 + 0.30 * feedback_adjustment).clamp(0.2, 1.5);
             let total_score = base_score * feedback_multiplier;
 
@@ -218,7 +218,7 @@ impl ContextCurator {
             });
         }
 
-        // ── GNN cluster-label boost
+ // GNN cluster-label boost
         if !ranked.is_empty() {
             ranked.sort_by(|a, b| {
                 b.node
@@ -258,7 +258,7 @@ impl ContextCurator {
             }
         }
 
-        // ── MMR (Maximal Marginal Relevance) selection
+ // MMR (Maximal Marginal Relevance) selection
         const MMR_LAMBDA: f32 = 0.7;
         ranked.sort_by(|a, b| {
             b.node
@@ -295,7 +295,7 @@ impl ContextCurator {
         // Touch access counts for the nodes we're actually surfacing so that
         // Ebbinghaus stability and usage_score reflect real retrieval patterns.
         // Then promote any predicted edges whose both endpoints were just confirmed
-        // accessed — fire-and-forget, does not block the response.
+        // accessed - fire-and-forget, does not block the response.
         {
             let storage = self.storage.clone();
             let ids: Vec<String> = selected.iter().map(|c| c.node.node_id.clone()).collect();
@@ -456,7 +456,7 @@ fn relation_weight(relationship: &Relationship) -> f32 {
 
 /// Ebbinghaus forgetting curve: `e^(-age / stability)`.
 /// Stability grows with access_count so frequently-retrieved nodes stay fresh
-/// longer — a node accessed 10× has twice the half-life of an unread one.
+/// longer - a node accessed 10× has twice the half-life of an unread one.
 fn recency_score(updated_at: i64, now: i64, access_count: i64) -> f32 {
     let age_seconds = (now - updated_at).max(0) as f32;
     let age_days = age_seconds / 86_400.0;

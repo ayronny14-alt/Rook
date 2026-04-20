@@ -6,7 +6,7 @@ const fs = require('fs');
 let backendProc = null;
 let restartCount = 0;
 let restartTimestamps = [];
-const MAX_RESTARTS = 3;
+const MAX_RESTARTS = 3; // three strikes. we out.
 const RESTART_WINDOW_MS = 10_000;
 let onLogCb = null;
 let onExitCb = null;
@@ -50,7 +50,7 @@ function spawnBackend() {
     onExitCb?.({ code, restartCount });
 
     if (supervisorStopped) return;
-    // Intentional exit (code 0) — don't respawn
+    // Intentional exit (code 0) - don't respawn
     if (code === 0) return;
 
     // Prune timestamps outside the crash window
@@ -59,7 +59,7 @@ function spawnBackend() {
 
     if (restartTimestamps.length >= MAX_RESTARTS) {
       // three strikes. we out.
-      const msg = `[backend] crashed ${MAX_RESTARTS} times in ${RESTART_WINDOW_MS / 1000}s — giving up`;
+      const msg = `[backend] crashed ${MAX_RESTARTS} times in ${RESTART_WINDOW_MS / 1000}s - giving up`;
       console.error(msg);
       onLogCb?.(msg);
       onExitCb?.({ code, restartCount, gaveUp: true });

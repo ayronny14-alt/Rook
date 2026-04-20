@@ -1,4 +1,4 @@
-/// Plugin installer — clones a GitHub repo to the local plugins directory,
+/// Plugin installer - clones a GitHub repo to the local plugins directory,
 /// detects its entry point, and registers it in the PluginRegistry.
 use anyhow::{Context, Result};
 use std::path::{Path, PathBuf};
@@ -26,7 +26,7 @@ pub async fn install_plugin(plugin: &Plugin, registry: &PluginRegistry) -> Resul
 
     if plugin.owner.is_empty() || plugin.repo.is_empty() {
         let msg = format!(
-            "owner/repo missing for plugin '{}' — cannot build clone URL",
+            "owner/repo missing for plugin '{}' - cannot build clone URL",
             plugin.id
         );
         error!("[install] {}", msg);
@@ -43,7 +43,7 @@ pub async fn install_plugin(plugin: &Plugin, registry: &PluginRegistry) -> Resul
         .await
         .context("create plugins dir")?;
 
-    // ── 1. git clone / pull ─────────────────────────────────────────────
+ // 1. git clone / pull 
     let clone_url = format!("https://github.com/{}/{}.git", plugin.owner, plugin.repo);
     if install_dir.join(".git").exists() {
         info!("[install] pulling {}", clone_url);
@@ -72,9 +72,9 @@ pub async fn install_plugin(plugin: &Plugin, registry: &PluginRegistry) -> Resul
         }
     }
 
-    // ── 1b. Manifest verification ────────────────────────────────────────
+ // 1b. Manifest verification 
     // If the repo ships a `rook.json` manifest, validate it. If no manifest
-    // exists we warn but allow the install — most community plugins predate the
+    // exists we warn but allow the install - most community plugins predate the
     // spec. A missing manifest is a yellow flag, not a hard block.
     let manifest_path = install_dir.join("rook.json");
     if manifest_path.exists() {
@@ -87,14 +87,14 @@ pub async fn install_plugin(plugin: &Plugin, registry: &PluginRegistry) -> Resul
                     );
                 }
                 Ok(_) => {
-                    let msg = "Plugin manifest (rook.json) is missing required 'name' or 'version' fields — install aborted for safety.";
+                    let msg = "Plugin manifest (rook.json) is missing required 'name' or 'version' fields - install aborted for safety.";
                     warn!("[install] {}", msg);
                     let _ = registry.set_status(&plugin.id, PluginStatus::Error, Some(msg));
                     return Err(anyhow::anyhow!(msg));
                 }
                 Err(e) => {
                     let msg = format!(
-                        "Plugin manifest (rook.json) is not valid JSON: {} — install aborted.",
+                        "Plugin manifest (rook.json) is not valid JSON: {} - install aborted.",
                         e
                     );
                     warn!("[install] {}", msg);
@@ -106,13 +106,13 @@ pub async fn install_plugin(plugin: &Plugin, registry: &PluginRegistry) -> Resul
         }
     } else {
         warn!(
-            "[install] no rook.json manifest found for plugin '{}' — \
+            "[install] no rook.json manifest found for plugin '{}' - \
              installing unverified code from {}/{}. Review the repo before enabling.",
             plugin.id, plugin.owner, plugin.repo
         );
     }
 
-    // ── 2. Detect entry point + write mcp.json ───────────────────────────
+ // 2. Detect entry point + write mcp.json 
     // npx / uvx handle dependencies on first invocation so we skip npm/pip install.
     let mcp = detect_mcp_config(&install_dir, &plugin.id).await;
     let entry_point = mcp.as_ref().map(|(ep, _)| ep.as_str());
@@ -125,7 +125,7 @@ pub async fn install_plugin(plugin: &Plugin, registry: &PluginRegistry) -> Resul
         }
     }
 
-    // ── 3. Register ──────────────────────────────────────────────────────
+ // 3. Register 
     let path_str = install_dir.to_string_lossy().into_owned();
     registry.set_installed(&plugin.id, &path_str, entry_point)?;
     info!("[install] done id={} path={}", plugin.id, path_str);
@@ -149,7 +149,7 @@ pub async fn uninstall_plugin(plugin: &Plugin, registry: &PluginRegistry) -> Res
     Ok(())
 }
 
-// ── Helpers ────────────────────────────────────────────────────────────────
+// Helpers 
 
 pub(crate) async fn run_cmd_test(program: &str, args: &[&str], cwd: &Path) -> Result<String> {
     run_command(program, args, cwd).await

@@ -1,5 +1,4 @@
-// ══════════════════════════════════════════════════════════════════════════════
-
+// 
 use anyhow::{anyhow, Result};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -160,7 +159,7 @@ impl ShellManager {
                         collected.push('\n');
                     }
                     Ok(None) => {
-                        // stdout closed — still drain stderr then finish
+                        // stdout closed - still drain stderr then finish
                         while let Ok(Some(l)) = err_reader.next_line().await {
                             let msg = format!("[stderr] {}", l);
                             on_line(&msg);
@@ -465,7 +464,7 @@ impl ShellManager {
                 "idle"
             };
             out.push_str(&format!(
-                "  • {} — cwd={} — {} — last used {}s ago — {} buf chars\n",
+                "  • {} - cwd={} - {} - last used {}s ago - {} buf chars\n",
                 s.name,
                 s.cwd.display(),
                 bg,

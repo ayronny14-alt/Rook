@@ -1,4 +1,4 @@
-/* Rook v2 — Quiet Cartography */
+/* Rook v2 - Quiet Cartography */
 
 :root {
   --bg:          #F7F2EA;
@@ -43,22 +43,22 @@
   --rad-sm: 8px;
   --rad-lg: 22px;
 
-  /* Signal gradient — used for accents that want a little dimension. */
+  /* Signal gradient - used for accents that want a little dimension. */
   --signal-grad: linear-gradient(135deg, #FF3DAA 0%, #E6188A 55%, #B30D6C 100%);
 }
 
 [data-theme="ink"] {
-  --bg:      #0E1018;
-  --bg-soft: #161925;
-  --bg-card: #1B1E2C;
-  --bg-sink: #080A10;
-  --ink:     #EEEAE0;
-  --ink-2:   #CFCABE;
-  --ink-3:   #8A8DA0;
-  --ink-4:   #5A5E73;
-  --ink-5:   #2E3244;
-  --line:    rgba(238,234,224,0.06);
-  --line-2:  rgba(238,234,224,0.12);
+  --bg:      #05060B;
+  --bg-soft: #0A0C14;
+  --bg-card: #0F1220;
+  --bg-sink: #020307;
+  --ink:     #F2EEE4;
+  --ink-2:   #D4CFC0;
+  --ink-3:   #7B7E92;
+  --ink-4:   #474A5E;
+  --ink-5:   #1C2032;
+  --line:    rgba(238,234,224,0.045);
+  --line-2:  rgba(238,234,224,0.09);
   --signal:  #8BAAD4;
   --signal-ink: #B2C8E6;
   --signal-wash: rgba(139,170,212,0.12);
@@ -93,11 +93,11 @@ button { cursor: pointer; }
 .serif  { font-family: var(--fs-display); font-style: italic; font-weight: 400; }
 .signal { color: var(--signal-ink); }
 
-/* ── App ── */
+/* App */
 .app { display: grid; grid-template-rows: 1fr; height: 100%; min-height: 0; }
 .main-pane { min-width: 0; min-height: 0; position: relative; overflow: hidden; background: var(--bg); }
 
-/* ── Topbar ── */
+/* Topbar */
 .topbar {
   position: absolute; top: 0; left: 0; right: 0; z-index: 20;
   height: 52px;
@@ -165,7 +165,7 @@ button { cursor: pointer; }
 .win-btn:hover { background: var(--bg-soft); color: var(--ink); }
 .win-btn.close:hover { background: rgba(185,74,42,0.12); color: #b94a2a; }
 
-/* ── Content ── */
+/* Content */
 .content {
   position: absolute; inset: 52px 0 0 0; overflow: hidden;
   animation: page-in 360ms var(--ease-out) both;
@@ -175,7 +175,7 @@ button { cursor: pointer; }
   to   { opacity: 1; transform: none; }
 }
 
-/* ── Chat layout ── */
+/* Chat layout */
 .chat-layout { display: grid; height: 100%; min-height: 0; position: relative; }
 
 .chat-stream {
@@ -386,7 +386,7 @@ button { cursor: pointer; }
 }
 .approval-bar .sp { flex: 1; }
 
-/* ── Rail ── */
+/* Rail */
 .rail-wrap {
   position: absolute; right: 0; top: 0; bottom: 0;
   display: flex; flex-direction: row-reverse;
@@ -457,7 +457,7 @@ button { cursor: pointer; }
 .trail-step-meta { font-size: 10px; color: var(--ink-4); letter-spacing: 0.04em; text-transform: uppercase; }
 .trail-empty { font-size: 13px; color: var(--ink-4); font-style: italic; }
 
-/* ── Skills ── */
+/* Skills */
 .page-skills { height: 100%; display: grid; grid-template-rows: auto auto 1fr; min-height: 0; }
 .sk-head { padding: 48px 80px 24px; }
 .sk-controls { display: grid; grid-template-columns: auto 1fr; gap: 18px; align-items: center; padding: 0 80px 20px; }
@@ -500,7 +500,7 @@ button { cursor: pointer; }
 .btn-danger { color: var(--ink-3); }
 .btn-danger:hover { background: rgba(185,74,42,0.12); color: #b94a2a; }
 
-/* ── Settings ── */
+/* Settings */
 .page-settings { height: 100%; display: grid; grid-template-columns: 260px 1fr; min-height: 0; }
 .set-nav { padding: 48px 8px 48px 40px; overflow-y: auto; }
 .set-nav-row { display: grid; grid-template-columns: 30px 1fr; gap: 6px; align-items: baseline; width: 100%; padding: 10px 18px; border-radius: var(--rad-sm); color: var(--ink-3); text-align: left; transition: all var(--dur) var(--ease); }
@@ -545,7 +545,7 @@ button { cursor: pointer; }
 .set-footer-note { font-size: 11.5px; color: var(--ink-4); letter-spacing: 0.04em; }
 .set-saved { font-size: 11.5px; color: var(--signal-ink); animation: slide-in 0.3s ease both; }
 
-/* ── Tweaks panel ── */
+/* Tweaks panel */
 .tweaks-panel {
   position: fixed; right: 20px; bottom: 20px; z-index: 60;
   width: 320px; border-radius: var(--rad); background: var(--bg-card);
@@ -571,7 +571,7 @@ button { cursor: pointer; }
 
 .heartbeat { width: 6px; height: 6px; border-radius: 50%; background: var(--signal); display: inline-block; animation: pulse 2.6s ease-in-out infinite; }
 
-/* ── Drop overlay ── */
+/* Drop overlay */
 .drop-overlay {
   position: absolute; inset: 0; z-index: 18;
   background: color-mix(in oklab, var(--signal-wash) 90%, transparent);
@@ -595,7 +595,7 @@ button { cursor: pointer; }
 }
 .drop-overlay-sub { font-size: 13px; color: var(--ink-3); margin-top: 6px; }
 
-/* ── Attachment chips on composer ── */
+/* Attachment chips on composer */
 .composer-attachments {
   display: flex; flex-wrap: wrap; gap: 6px;
   margin: 0 -4px 10px;
@@ -629,7 +629,7 @@ button { cursor: pointer; }
 }
 .attach-x:hover { background: var(--ink); color: var(--bg); }
 
-/* ── Cmd+K palette ── */
+/* Cmd+K palette */
 .palette-shroud {
   position: fixed; inset: 0; z-index: 80;
   background: color-mix(in oklab, var(--ink) 35%, transparent);

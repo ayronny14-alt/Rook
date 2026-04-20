@@ -37,6 +37,11 @@ desktop.ini
 *.temp
 .cache/
 
+# Media / demos
+*.mp4
+*.mov
+*.webm
+
 # Windows build deps
 nuget.exe
 packages/

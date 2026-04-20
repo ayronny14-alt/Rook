@@ -18,7 +18,7 @@ pub enum IPCRequest {
         /// Optional system prompt override from the user (Settings → Chat).
         #[serde(default)]
         system_prompt: Option<String>,
-        /// Per-request temperature override (0.0–2.0).
+        /// Per-request temperature override (0.0-2.0).
         #[serde(default)]
         temperature: Option<f32>,
         /// Per-request max_tokens override.
@@ -184,7 +184,7 @@ pub enum IPCRequest {
     InstallPlugin {
         id: String,
         plugin_id: String,
-        /// Inline plugin name — required when the plugin is not yet in the registry.
+        /// Inline plugin name - required when the plugin is not yet in the registry.
         #[serde(default)]
         name: Option<String>,
         #[serde(default)]
@@ -499,7 +499,7 @@ pub enum IPCResponse {
         id: String,
         message: String,
     },
-    /// Streaming token chunk — sent for each partial text fragment before `ChatDone`.
+    /// Streaming token chunk - sent for each partial text fragment before `ChatDone`.
     ChatChunk {
         id: String,
         token: String,

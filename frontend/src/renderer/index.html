@@ -17,7 +17,7 @@
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
 <script type="text/babel" data-presets="react">
-// ── helpers ──────────────────────────────────────────────
+// helpers 
 
 const uid = () => Math.random().toString(36).slice(2, 10);
 
@@ -136,7 +136,7 @@ const NODE_TYPES = {
 // keep window.ROOK_DATA populated for NodeChip reads
 window.ROOK_DATA = { NODE_TYPES, GRAPH: { nodes: [], edges: [] }, SESSIONS: [], PLUGINS: [] };
 
-// ── Backend context ───────────────────────────────────────
+// Backend context 
 
 const BackendCtx = React.createContext(null);
 
@@ -265,7 +265,7 @@ function BackendProvider({ children }) {
 
         case 'skills_list':
         case 'plugin_list': {
-          // merge results from both list_skills and list_plugins — skills are
+          // merge results from both list_skills and list_plugins - skills are
           // file-based (.docu/skills), plugins are installed MCPs/connectors.
           const incoming = backendSkillsToPlugins(msg.skills || msg.plugins || []);
           setPlugins(prev => {
@@ -305,7 +305,7 @@ function BackendProvider({ children }) {
       }
     });
 
-    // pull current pipe state directly — the 'connect' event may fire before
+    // pull current pipe state directly - the 'connect' event may fire before
     // this subscription attaches, and we don't want to guess.
     const poll = () => {
       if (!window.rook?.getPipeStatus) return;
@@ -380,7 +380,7 @@ function BackendProvider({ children }) {
 
 function useBackend() { return React.useContext(BackendCtx); }
 
-// ── Primitives ────────────────────────────────────────────
+// Primitives 
 
 function NodeChip({ id, onHover, onClick }) {
   const node = (window.ROOK_DATA.GRAPH.nodes || []).find(n => n.id === id);
@@ -399,7 +399,7 @@ function NodeChip({ id, onHover, onClick }) {
   );
 }
 
-// ── Graph ─────────────────────────────────────────────────
+// Graph 
 
 function renderGlyph(type, x, y, r, color, solid) {
   if (type === 'person') return (
@@ -508,7 +508,7 @@ function Graph({ width = 900, height = 620, highlightIds = [], recentIds = [], o
   );
 }
 
-// ── Chat ─────────────────────────────────────────────────
+// Chat 
 
 function Chat({ onHoverNode, selectedNode, onSelectNode }) {
   const { convTitle, msgs, streaming, sendChat, stopChat, curatedIds, approval, approveTools, mode, setMode } = useBackend();
@@ -521,7 +521,7 @@ function Chat({ onHoverNode, selectedNode, onSelectNode }) {
 
   React.useEffect(() => { onHoverNode && onHoverNode(hoveredChip); }, [hoveredChip]);
 
-  // follow the stream — also watch the last message's text length so growing
+  // follow the stream - also watch the last message's text length so growing
   // assistant tokens keep scrolling, not just new messages.
   const tailLen = msgs.length > 0 ? (msgs[msgs.length - 1].text || '').length : 0;
   React.useEffect(() => {
@@ -573,7 +573,7 @@ function Chat({ onHoverNode, selectedNode, onSelectNode }) {
     el.style.height = Math.min(200, el.scrollHeight) + 'px';
   };
 
-  // ── Drop ingestion ────────────────────────────────────
+ // Drop ingestion 
   const onDragOver = e => { e.preventDefault(); e.stopPropagation(); setDragHover(true); };
   const onDragLeave = e => { e.preventDefault(); e.stopPropagation(); setDragHover(false); };
   const onDrop = async e => {
@@ -606,7 +606,7 @@ function Chat({ onHoverNode, selectedNode, onSelectNode }) {
     taRef.current?.focus();
   };
 
-  // ── Paste handling: images become attachments, text falls through ─────
+ // Paste handling: images become attachments, text falls through 
   const onPaste = async e => {
     const items = Array.from(e.clipboardData?.items || []);
     const imageItem = items.find(it => it.type.startsWith('image/'));
@@ -689,7 +689,7 @@ function Chat({ onHoverNode, selectedNode, onSelectNode }) {
 
       {approval && (
         <div className="approval-bar">
-          <span>{approval.tool_name || 'tool'} — approve?</span>
+          <span>{approval.tool_name || 'tool'} - approve?</span>
           <span style={{fontSize:12,color:'var(--ink-4)',flex:1,marginLeft:8,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
             {approval.description || ''}
           </span>
@@ -758,7 +758,7 @@ function Msg({ m, onHoverChip, onClickChip }) {
   );
 }
 
-// ── MapHUD ────────────────────────────────────────────────
+// MapHUD 
 
 function MapHUD({ hoveredId, selectedId, onNodeHover, onNodeClick }) {
   const [collapsed, setCollapsed] = React.useState(false);
@@ -840,7 +840,7 @@ function MapHUD({ hoveredId, selectedId, onNodeHover, onNodeClick }) {
   );
 }
 
-// ── Rail ─────────────────────────────────────────────────
+// Rail 
 
 function Rail({ onSelectNode }) {
   const [tab, setTab] = React.useState(null);
@@ -969,7 +969,7 @@ function TrailPanel({ onSelectNode }) {
   );
 }
 
-// ── Skills ────────────────────────────────────────────────
+// Skills 
 
 function Skills() {
   const { plugins } = useBackend();
@@ -1041,7 +1041,7 @@ function Skills() {
   );
 }
 
-// ── Settings ──────────────────────────────────────────────
+// Settings 
 
 function Settings() {
   const { saveSettings } = useBackend();
@@ -1213,7 +1213,7 @@ function SetRow({ label, hint, children, wide }) {
   );
 }
 
-// ── Tweaks panel ──────────────────────────────────────────
+// Tweaks panel 
 
 const TWEAK_DEFAULTS = { theme: 'paper', density: 'balanced', accent: '#E6188A' };
 
@@ -1240,7 +1240,7 @@ function TweaksPanel({ open, onClose, tweaks, setTweaks }) {
   return (
     <div className="tweaks-panel">
       <div className="tweaks-head">
-        <span className="tweaks-title">Tweaks</span>
+        <span className="tweaks-title">Customizes</span>
         <button className="tweaks-close" onClick={onClose}>×</button>
       </div>
       <div className="tw-row">
@@ -1262,7 +1262,7 @@ function TweaksPanel({ open, onClose, tweaks, setTweaks }) {
   );
 }
 
-// ── Cmd+K palette ─────────────────────────────────────────
+// Cmd+K palette 
 //
 // Fuzzy-ish substring search across conversations, memory nodes, pages,
 // and quick actions. Pure frontend. Cmd+K / Ctrl+K opens, Esc closes,
@@ -1394,7 +1394,7 @@ function glyphFor(t) {
   return ({ person:'●', place:'◆', thing:'■', fact:'＋', project:'⬡', skill:'▲' })[t] || '·';
 }
 
-// ── App shell ─────────────────────────────────────────────
+// App shell 
 
 function App() {
   const [page, setPage] = React.useState(() => localStorage.getItem('rook:page') || 'chat');
@@ -1463,7 +1463,7 @@ function App() {
                 <path d="M10.3 10.3L14 14" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
               </svg>
             </button>
-            <button className="iconpill" title="tweaks" onClick={() => setTweaksOpen(o => !o)}>
+            <button className="iconpill" title="customizes" onClick={() => setTweaksOpen(o => !o)}>
               <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
                 <circle cx="8" cy="8" r="1.5" fill="currentColor"/>
                 <circle cx="3" cy="8" r="1.5" fill="currentColor"/>
@@ -1520,7 +1520,7 @@ function App() {
   );
 }
 
-// ── Mount ─────────────────────────────────────────────────
+// Mount 
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <BackendProvider>

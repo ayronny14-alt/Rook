@@ -4,7 +4,7 @@ use uuid::Uuid;
 
 use crate::memory::storage::MemoryStorage;
 
-// ── Types ──────────────────────────────────────────────────────────────────
+// Types 
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -79,7 +79,7 @@ pub struct Plugin {
     pub error_msg: Option<String>,
 }
 
-// ── Registry ───────────────────────────────────────────────────────────────
+// Registry 
 
 #[derive(Clone)]
 pub struct PluginRegistry {
@@ -306,7 +306,7 @@ impl PluginRegistry {
     }
 }
 
-// ── Helpers ────────────────────────────────────────────────────────────────
+// Helpers 
 
 fn now_secs() -> i64 {
     std::time::SystemTime::now()

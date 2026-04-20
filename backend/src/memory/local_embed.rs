@@ -15,9 +15,9 @@
 //   • Char n-grams: sizes 3 and 4, walked across tokens so we get sub-word
 //     similarity (`rust`/`rusty`/`rusted` share 3-grams).
 //   • Feature hashing: two hashes per feature (one for the bucket, one for the
-//     sign) — the standard trick for cancelling collision bias (Weinberger et
+//     sign) - the standard trick for cancelling collision bias (Weinberger et
 //     al. 2009). Output dim = 384.
-//   • Frequency weighting: log(1 + tf). No IDF — that would require a global
+//   • Frequency weighting: log(1 + tf). No IDF - that would require a global
 //     corpus table and introduce write contention for zero retrieval benefit
 //     at our scale.
 //   • Final step: L2 normalize so cosine similarity reduces to a dot product.
@@ -26,7 +26,7 @@ const DIM: usize = 384;
 const NGRAM_MIN: usize = 3;
 const NGRAM_MAX: usize = 4;
 
-// Stop words that add noise to similarity — dropped before hashing.
+// Stop words that add noise to similarity - dropped before hashing.
 const STOP: &[&str] = &[
     "a", "an", "the", "and", "or", "but", "is", "are", "was", "were", "be", "been", "being",
     "have", "has", "had", "do", "does", "did", "of", "in", "on", "at", "to", "for", "with", "by",
@@ -99,7 +99,7 @@ fn add_feature(counts: &mut std::collections::HashMap<u64, f32>, feat: &str) {
     *counts.entry(h).or_insert(0.0) += 1.0;
 }
 
-// Small deterministic hash — std's DefaultHasher is fine for feature hashing.
+// Small deterministic hash - std's DefaultHasher is fine for feature hashing.
 // Not cryptographic; collisions are OK (that's the whole point).
 fn hash_feature(s: &str) -> u64 {
     use std::hash::{Hash, Hasher};

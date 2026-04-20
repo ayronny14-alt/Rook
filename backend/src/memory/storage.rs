@@ -200,7 +200,7 @@ CREATE TABLE IF NOT EXISTS tasks (
 CREATE INDEX IF NOT EXISTS idx_context_packets_conv ON context_packets(conversation_id);
 
 -- ============================================================
--- USER FACTS (global key-value store — always injected)
+-- USER FACTS (global key-value store - always injected)
 -- ============================================================
 
 CREATE TABLE IF NOT EXISTS user_facts (
@@ -310,13 +310,13 @@ impl MemoryStorage {
     /// the initial release. Each step is guarded so it is safe to run on any
     /// existing database (columns that already exist are left untouched).
     fn run_migrations(conn: &rusqlite::Connection) -> anyhow::Result<()> {
-        // Phase 3.1 — embedding dimension column for cross-model mismatch detection.
+        // Phase 3.1 - embedding dimension column for cross-model mismatch detection.
         // Storing dim lets search_similar skip vectors from a different model without
         // relying on cosine_similarity silently returning 0.0 for len mismatches.
         if !Self::column_exists(conn, "embeddings", "dim")? {
             conn.execute_batch("ALTER TABLE embeddings ADD COLUMN dim INTEGER;")?;
         }
-        // Phase 3.3 — session tracking on feedback rows so a user clicking 👍/👎
+        // Phase 3.3 - session tracking on feedback rows so a user clicking 👍/👎
         // multiple times in the same conversation only counts once (last vote wins).
         if !Self::column_exists(conn, "memory_feedback", "user_session")? {
             conn.execute_batch("ALTER TABLE memory_feedback ADD COLUMN user_session TEXT;")?;
@@ -328,18 +328,18 @@ impl MemoryStorage {
              ON memory_feedback(node_id, user_session) WHERE user_session IS NOT NULL;",
         )?;
 
-        // v1.3.4 — `context_packets` is an orphaned table; nothing writes to it
+        // v1.3.4 - `context_packets` is an orphaned table; nothing writes to it
         // any more since the sliding-window assembler replaced it. Drop it to
         // reclaim space and remove schema confusion.
         conn.execute_batch("DROP TABLE IF EXISTS context_packets;")?;
 
-        // v1.3.5 — incremental VACUUM so deleted embedding/node rows don't cause
+        // v1.3.5 - incremental VACUUM so deleted embedding/node rows don't cause
         // unbounded file growth. auto_vacuum=INCREMENTAL reclaims pages lazily
         // (a PRAGMA incremental_vacuum call, run periodically, does the actual
-        // reclaim — this just sets the mode on first migration).
+        // reclaim - this just sets the mode on first migration).
         conn.execute_batch("PRAGMA auto_vacuum = INCREMENTAL;")?;
 
-        // v1.3.6 — real access counter so usage_score is based on actual retrieval
+        // v1.3.6 - real access counter so usage_score is based on actual retrieval
         // frequency rather than tags.len() (which was a noisy proxy).
         if !Self::column_exists(conn, "object_memory", "access_count")? {
             conn.execute_batch(
@@ -347,7 +347,7 @@ impl MemoryStorage {
             )?;
         }
 
-        // v1.3.8 — compound and covering indexes for hot query paths.
+        // v1.3.8 - compound and covering indexes for hot query paths.
         // embeddings(node_id, embedding_type): speeds up per-node type lookups.
         conn.execute_batch(
             "CREATE INDEX IF NOT EXISTS idx_embeddings_node_type ON embeddings(node_id, embedding_type);",
@@ -367,7 +367,7 @@ impl MemoryStorage {
             "CREATE INDEX IF NOT EXISTS idx_object_memory_last_indexed ON object_memory(last_indexed DESC);",
         )?;
 
-        // v1.3.7 — user_fact_history tracks old values before overwrite so we can
+        // v1.3.7 - user_fact_history tracks old values before overwrite so we can
         // detect value drift over time and surface conflicts in the distiller.
         conn.execute_batch(
             "CREATE TABLE IF NOT EXISTS user_fact_history (
@@ -437,7 +437,7 @@ mod tests {
     fn new_in_memory_creates_all_tables() {
         let storage = MemoryStorage::new_in_memory().unwrap();
         let conn = storage.get_connection().unwrap();
-        // context_packets was dropped in the v1.3.5 migration — excluded here.
+        // context_packets was dropped in the v1.3.5 migration - excluded here.
         let tables = [
             "nodes",
             "edges",
@@ -571,7 +571,7 @@ mod tests {
                 |r| r.get(0),
             )
             .unwrap();
-        // Both rows inserted in same second; either order is valid — just check it's a known name
+        // Both rows inserted in same second; either order is valid - just check it's a known name
         assert!(name == "read_file" || name == "write_file");
     }
 
@@ -626,7 +626,7 @@ mod tests {
             [],
         )
         .unwrap();
-        // Second vote same session — should fail with UNIQUE violation
+        // Second vote same session - should fail with UNIQUE violation
         let result = conn.execute(
             "INSERT INTO memory_feedback (id, node_id, rating, source, user_session)
              VALUES ('f2', 'n1', -1, 'user', 'sess-abc')",
