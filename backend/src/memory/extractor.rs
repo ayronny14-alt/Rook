@@ -531,31 +531,59 @@ pub fn persist(memory: &MemoryStorage, ex: &Extracted) {
         return;
     }
     let graph = GraphMemory::new(memory.clone());
+    let embeddings = crate::memory::embedding::EmbeddingMemory::new(memory.clone());
     let mut created = 0usize;
+    let mut embedded = 0usize;
     for (name, kind) in ex.entities.iter() {
         // case-insensitive title dedupe
         let existing = graph
             .search_nodes(Some(NodeType::Concept), Some(name))
             .unwrap_or_default()
             .into_iter()
-            .any(|n| n.title.to_lowercase() == name.to_lowercase());
-        if existing {
+            .find(|n| n.title.to_lowercase() == name.to_lowercase());
+
+        let node_id = if let Some(n) = existing {
+            // known entity. skip; don't re-embed either, already there.
+            let _ = n;
             continue;
-        }
-        let meta = serde_json::json!({
-            "kind": kind.tag(),
-            "source": "extractor",
-            "confidence": 0.6,
-        });
-        if graph
-            .create_node(NodeType::Concept, name, Some(meta))
-            .is_ok()
+        } else {
+            let meta = serde_json::json!({
+                "kind": kind.tag(),
+                "source": "extractor",
+                "confidence": 0.6,
+            });
+            match graph.create_node(NodeType::Concept, name, Some(meta)) {
+                Ok(n) => {
+                    created += 1;
+                    n.id
+                }
+                Err(_) => continue,
+            }
+        };
+
+        // local embed so the node is retrievable via semantic search right
+        // now. was a bug; extracted entities used to sit invisible until
+        // someone re-mentioned them.
+        let embed_text = format!("{} ({})", name, kind.tag());
+        let vector = crate::memory::local_embed::embed(&embed_text);
+        if !vector.is_empty()
+            && embeddings
+                .store(
+                    &node_id,
+                    crate::memory::embedding::EmbeddingType::Summary,
+                    &vector,
+                    Some(&embed_text),
+                )
+                .is_ok()
         {
-            created += 1;
+            embedded += 1;
         }
     }
     if created > 0 {
-        info!("Extractor: created {} entity node(s)", created);
+        info!(
+            "Extractor: created {} entity node(s), embedded {}",
+            created, embedded
+        );
     }
 }
 

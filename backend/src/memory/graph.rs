@@ -342,6 +342,57 @@ impl GraphMemory {
         Ok(rows.filter_map(|r| r.ok()).collect())
     }
 
+    /// Hebbian bump. If an edge (either direction, any relationship) exists
+    /// between the two nodes, increase its strength by `delta`, capped at
+    /// `cap`. If none exists, create a `relates_to` edge seeded at `delta`.
+    /// Used by the curator to let the graph learn from co-retrieval: nodes
+    /// that show up together often grow a stronger link over time.
+    pub fn bump_edge_strength(&self, a: &str, b: &str, delta: f64, cap: f64) -> Result<()> {
+        if a == b {
+            return Ok(());
+        }
+        // scope the lookup so the connection is released before we dispatch
+        // anything else; the pool is size 1 under test and would deadlock.
+        let existing: Option<(String, f64)> = {
+            let conn = self.storage.sql_conn()?;
+            conn.query_row(
+                "SELECT id, strength FROM edges \
+                 WHERE (source_id = ?1 AND target_id = ?2) OR (source_id = ?2 AND target_id = ?1) \
+                 ORDER BY strength DESC LIMIT 1",
+                rusqlite::params![a, b],
+                |row| {
+                    let id: String = row.get(0)?;
+                    // strength has been written as both REAL and TEXT by different
+                    // call sites over time. try REAL, fall back to TEXT.
+                    let s: f64 = row.get::<_, f64>(1).unwrap_or_else(|_| {
+                        row.get::<_, String>(1)
+                            .ok()
+                            .and_then(|t| t.parse::<f64>().ok())
+                            .unwrap_or(0.0)
+                    });
+                    Ok((id, s))
+                },
+            )
+            .ok()
+        };
+
+        match existing {
+            Some((id, s)) => {
+                let next = (s + delta).min(cap);
+                let conn = self.storage.sql_conn()?;
+                conn.execute(
+                    "UPDATE edges SET strength = ?1 WHERE id = ?2",
+                    rusqlite::params![next.to_string(), id],
+                )?;
+            }
+            None => {
+                // seed fresh. relates_to is the catch-all relationship.
+                self.create_edge(a, b, Relationship::RelatesTo, delta, None)?;
+            }
+        }
+        Ok(())
+    }
+
     /// Create a directed edge only if no edge with the same (source, target, relationship) already
     /// exists in either direction. Returns `None` if a duplicate was detected.
     pub fn create_edge_if_not_exists(
@@ -524,6 +575,36 @@ mod tests {
         assert!(e2.is_none(), "duplicate call should return None");
         let connected = graph.get_connected_nodes(&a.id, None).unwrap();
         assert_eq!(connected.len(), 1, "only one edge should exist");
+    }
+
+    #[test]
+    fn bump_edge_strength_creates_then_strengthens() {
+        let storage = MemoryStorage::new_in_memory().unwrap();
+        let graph = GraphMemory::new(storage);
+        let a = graph.create_node(NodeType::Concept, "A", None).unwrap();
+        let b = graph.create_node(NodeType::Concept, "B", None).unwrap();
+
+        // first bump: no edge exists, should create one at delta.
+        graph.bump_edge_strength(&a.id, &b.id, 0.5, 3.0).unwrap();
+        let connected = graph.get_connected_nodes(&a.id, None).unwrap();
+        assert_eq!(connected.len(), 1);
+        assert!((connected[0].1.strength - 0.5).abs() < 1e-6);
+
+        // second bump: edge exists, should add delta.
+        graph.bump_edge_strength(&a.id, &b.id, 0.5, 3.0).unwrap();
+        let connected = graph.get_connected_nodes(&a.id, None).unwrap();
+        assert_eq!(connected.len(), 1, "bump must not create a duplicate");
+        assert!((connected[0].1.strength - 1.0).abs() < 1e-6);
+
+        // cap holds: a huge delta gets clamped.
+        graph.bump_edge_strength(&a.id, &b.id, 99.0, 3.0).unwrap();
+        let connected = graph.get_connected_nodes(&a.id, None).unwrap();
+        assert!((connected[0].1.strength - 3.0).abs() < 1e-6);
+
+        // self-loop is a no-op.
+        graph.bump_edge_strength(&a.id, &a.id, 1.0, 3.0).unwrap();
+        let connected = graph.get_connected_nodes(&a.id, None).unwrap();
+        assert_eq!(connected.len(), 1);
     }
 
     #[test]

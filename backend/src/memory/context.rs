@@ -303,6 +303,20 @@ impl ContextCurator {
             for id in &ids {
                 let _ = obj_store_bg.touch_accessed(id);
             }
+
+            // Hebbian co-selection. Two nodes that keep getting surfaced
+            // together for the same query belong together. Nudge every
+            // pair's edge strength by a hair, capped so it can't run away.
+            // Fires that run together, wire that run together.
+            let graph_bg = GraphMemory::new(storage.clone());
+            const HEBB_DELTA: f64 = 0.02;
+            const HEBB_CAP: f64 = 3.0;
+            for i in 0..ids.len() {
+                for j in (i + 1)..ids.len() {
+                    let _ = graph_bg.bump_edge_strength(&ids[i], &ids[j], HEBB_DELTA, HEBB_CAP);
+                }
+            }
+
             let _ = GraphTrainingManager::new(storage).promote_validated_edges();
         }
 

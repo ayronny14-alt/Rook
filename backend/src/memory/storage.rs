@@ -367,6 +367,18 @@ impl MemoryStorage {
             "CREATE INDEX IF NOT EXISTS idx_object_memory_last_indexed ON object_memory(last_indexed DESC);",
         )?;
 
+        // v1.3.9 - composite indexes matching the actual hot-query shapes.
+        // search_similar filters on (embedding_type, dim); the planner
+        // previously fell back to a scan when both predicates were needed.
+        conn.execute_batch(
+            "CREATE INDEX IF NOT EXISTS idx_embeddings_type_dim ON embeddings(embedding_type, dim);",
+        )?;
+        // dedup-check in create_edge_if_not_exists looks up (source, target, relationship).
+        // also speeds up get_connected_nodes's relationship-filtered path.
+        conn.execute_batch(
+            "CREATE INDEX IF NOT EXISTS idx_edges_src_tgt_rel ON edges(source_id, target_id, relationship);",
+        )?;
+
         // v1.3.7 - user_fact_history tracks old values before overwrite so we can
         // detect value drift over time and surface conflicts in the distiller.
         conn.execute_batch(
