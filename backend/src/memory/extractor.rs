@@ -580,7 +580,7 @@ mod tests {
             ex.user_facts.get("name").map(String::as_str),
             Some("Aaron Fricker")
         );
-        assert!(ex.user_facts.get("company").is_some());
+        assert!(ex.user_facts.contains_key("company"));
     }
 
     #[test]
