@@ -140,6 +140,86 @@ window.ROOK_DATA = { NODE_TYPES, GRAPH: { nodes: [], edges: [] }, SESSIONS: [], 
 
 const BackendCtx = React.createContext(null);
 
+// Provider profiles. Each profile is a self-contained { name, baseUrl, apiKey,
+// model, models[] } record. The UI lets you stack as many as you want and
+// switch between them per-turn. The first one created becomes the active.
+const DEFAULT_PROFILE = () => ({
+  id: uid(),
+  name: 'OpenAI',
+  baseUrl: 'https://api.openai.com/v1',
+  apiKey: '',
+  model: '',
+  models: [],
+  lastFetched: 0,
+});
+
+function useProviders() {
+  const [state, setState] = React.useState(() => {
+    try {
+      const raw = localStorage.getItem('rook:providers');
+      if (raw) {
+        const p = JSON.parse(raw);
+        if (p && Array.isArray(p.profiles) && p.profiles.length > 0) return p;
+      }
+    } catch (_) {}
+    const first = DEFAULT_PROFILE();
+    return { profiles: [first], activeId: first.id };
+  });
+
+  React.useEffect(() => {
+    try { localStorage.setItem('rook:providers', JSON.stringify(state)); } catch (_) {}
+  }, [state]);
+
+  const active = state.profiles.find(p => p.id === state.activeId) || state.profiles[0];
+
+  const upsert = (prof) => setState(s => {
+    const existing = s.profiles.findIndex(p => p.id === prof.id);
+    const next = [...s.profiles];
+    if (existing >= 0) next[existing] = { ...next[existing], ...prof };
+    else next.push(prof);
+    return { ...s, profiles: next };
+  });
+
+  const remove = (id) => setState(s => {
+    const next = s.profiles.filter(p => p.id !== id);
+    if (next.length === 0) next.push(DEFAULT_PROFILE());
+    const activeId = s.activeId === id ? next[0].id : s.activeId;
+    return { profiles: next, activeId };
+  });
+
+  const setActive = (id) => setState(s => ({ ...s, activeId: id }));
+
+  const setActiveModel = (model) => setState(s => ({
+    ...s,
+    profiles: s.profiles.map(p => p.id === s.activeId ? { ...p, model } : p),
+  }));
+
+  async function refreshModels(id) {
+    const prof = state.profiles.find(p => p.id === id);
+    if (!prof) return;
+    const base = (prof.baseUrl || '').replace(/\/$/, '');
+    if (!base) return;
+    try {
+      const resp = await fetch(`${base}/models`, {
+        headers: prof.apiKey ? { Authorization: `Bearer ${prof.apiKey}` } : {},
+      });
+      if (!resp.ok) throw new Error(`${resp.status}`);
+      const data = await resp.json();
+      const models = (data.data || data.models || [])
+        .map(m => typeof m === 'string' ? m : (m.id || m.name || ''))
+        .filter(Boolean)
+        .sort();
+      upsert({ ...prof, models, lastFetched: Date.now() });
+      return models;
+    } catch (e) {
+      console.warn('model fetch failed', e);
+      return null;
+    }
+  }
+
+  return { state, active, upsert, remove, setActive, setActiveModel, refreshModels };
+}
+
 function BackendProvider({ children }) {
   const [pipeOk,     setPipeOk]     = React.useState(false);
   const [version,    setVersion]    = React.useState('');
@@ -147,6 +227,9 @@ function BackendProvider({ children }) {
   const [sessions,   setSessions]   = React.useState([]);
   const [plugins,    setPlugins]    = React.useState([]);
   const [curatedIds, setCuratedIds] = React.useState([]);
+
+  // provider profiles
+  const providers = useProviders();
 
   // chat state
   const [convId,     setConvId]     = React.useState(null);
@@ -156,11 +239,27 @@ function BackendProvider({ children }) {
   const [mode,       setMode]       = React.useState('chat');
   const [approval,   setApproval]   = React.useState(null);
 
-  const streamRef  = React.useRef('');
-  const convIdRef  = React.useRef(null);
+  const streamRef     = React.useRef('');
+  const convIdRef     = React.useRef(null);
+  const activeModelRef = React.useRef(null);
 
-  // keep ref in sync so closures in onMessage see current value
+  // keep refs in sync so closures in onMessage see current values
   React.useEffect(() => { convIdRef.current = convId; }, [convId]);
+  React.useEffect(() => { activeModelRef.current = providers.active?.model || null; }, [providers.active?.model]);
+
+  // Ctrl/Cmd + 1/2/3 swap chat / coder / team. the active mode reads
+  // as a subtle underline in the composer and the keys just work.
+  React.useEffect(() => {
+    const onKey = e => {
+      if (!(e.ctrlKey || e.metaKey) || e.shiftKey || e.altKey) return;
+      if (e.target && /INPUT|TEXTAREA/.test(e.target.tagName) && e.key !== '1' && e.key !== '2' && e.key !== '3') return;
+      if (e.key === '1') { e.preventDefault(); setMode('chat'); }
+      else if (e.key === '2') { e.preventDefault(); setMode('coder'); }
+      else if (e.key === '3') { e.preventDefault(); setMode('team'); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   // sync graph + sessions to window.ROOK_DATA so NodeChip works
   React.useEffect(() => { window.ROOK_DATA.GRAPH    = graph;    }, [graph]);
@@ -205,6 +304,8 @@ function BackendProvider({ children }) {
             setMsgs((msg.messages || []).map(m => ({
               role: m.role === 'user' ? 'user' : 'assistant',
               text: m.content || '',
+              ts: m.created_at ? (m.created_at > 2e12 ? m.created_at : m.created_at * 1000) : Date.now(),
+              model: m.model || null,
             })));
           }
           break;
@@ -226,7 +327,8 @@ function BackendProvider({ children }) {
               const last = prev[prev.length - 1];
               if (last?.role === 'assistant' && last._streaming)
                 return [...prev.slice(0, -1), { ...last, text: snap }];
-              return [...prev, { role: 'assistant', text: snap, _streaming: true }];
+              const m = activeModelRef.current || null;
+              return [...prev, { role: 'assistant', text: snap, _streaming: true, ts: Date.now(), model: m }];
             });
           }
           break;
@@ -326,11 +428,31 @@ function BackendProvider({ children }) {
   function sendChat(text) {
     if (!text.trim() || streaming) return;
     const chatId = uid();
-    setMsgs(prev => [...prev, { role: 'user', text }]);
+    setMsgs(prev => [...prev, { role: 'user', text, ts: Date.now() }]);
     setStreaming(true);
     streamRef.current = '';
-    window.rook.send({ type: 'chat', id: chatId, conversation_id: convId || undefined, message: text, agent_mode: mode });
+    const p = providers.active || {};
+    window.rook.send({
+      type: 'chat',
+      id: chatId,
+      conversation_id: convId || undefined,
+      message: text,
+      agent_mode: mode,
+      base_url: p.baseUrl || undefined,
+      api_key: p.apiKey || undefined,
+      model: p.model || undefined,
+    });
   }
+
+  // push the active profile into the backend whenever it changes so the
+  // rust side knows which endpoint to hit for background tasks too.
+  React.useEffect(() => {
+    if (!window.rook || !providers.active) return;
+    const p = providers.active;
+    if (!p.baseUrl && !p.apiKey && !p.model) return;
+    window.rook.send({ type: 'update_config', id: uid(), base_url: p.baseUrl || '', api_key: p.apiKey || '', model: p.model || '' });
+    try { window.rook.saveEnvSettings && window.rook.saveEnvSettings({ apiUrl: p.baseUrl, apiKey: p.apiKey, model: p.model }); } catch (_) {}
+  }, [providers.active && providers.active.id, providers.active && providers.active.model, providers.active && providers.active.apiKey, providers.active && providers.active.baseUrl]);
 
   function stopChat() {
     if (!streaming) return;
@@ -373,6 +495,7 @@ function BackendProvider({ children }) {
     graph, sessions, plugins, curatedIds,
     convId, convTitle, msgs, streaming, mode, setMode, approval,
     sendChat, stopChat, newConversation, loadConversation, approveTools, saveSettings,
+    providers,
   };
 
   return <BackendCtx.Provider value={ctx}>{children}</BackendCtx.Provider>;
@@ -401,40 +524,84 @@ function NodeChip({ id, onHover, onClick }) {
 
 // Graph 
 
+// Distinct glyph per node type. Every shape gets a soft drop-shadow for
+// depth, and highlighted nodes pick up a brighter inner fill so they lift
+// off the graph instead of reading as uniform squares.
 function renderGlyph(type, x, y, r, color, solid) {
-  if (type === 'person') return (
-    <>
-      <circle cx={x} cy={y} r={r} fill={color}/>
-      <circle cx={x} cy={y} r={r + 2.5} fill="none" stroke={color} strokeWidth=".7" opacity=".6"/>
-    </>
-  );
+  const shadow = { filter: 'drop-shadow(0 1px 1.5px rgba(0,0,0,0.18))' };
+  if (type === 'person') {
+    // circle with a concentric iris and a soft outer ring
+    return (
+      <g style={shadow}>
+        <circle cx={x} cy={y} r={r + 2.5} fill="none" stroke={color} strokeWidth=".6" opacity=".5"/>
+        <circle cx={x} cy={y} r={r} fill={color}/>
+        <circle cx={x} cy={y} r={r * 0.4} fill="var(--bg-card)" opacity={solid ? 0.9 : 0.55}/>
+      </g>
+    );
+  }
   if (type === 'place') {
-    const s = r + 1;
-    return <polygon points={`${x},${y-s} ${x+s},${y} ${x},${y+s} ${x-s},${y}`} fill={solid ? color : 'var(--bg)'} stroke={color} strokeWidth="1.2"/>;
+    // nested diamond - outer line, inner fill
+    const s = r + 1.5;
+    const si = r * 0.5;
+    return (
+      <g style={shadow}>
+        <polygon points={`${x},${y-s} ${x+s},${y} ${x},${y+s} ${x-s},${y}`}
+          fill={solid ? color : 'var(--bg-card)'} stroke={color} strokeWidth="1.3"/>
+        <polygon points={`${x},${y-si} ${x+si},${y} ${x},${y+si} ${x-si},${y}`}
+          fill={color} opacity={solid ? 0.35 : 0.7}/>
+      </g>
+    );
   }
   if (type === 'thing') {
-    const s = r;
-    return <rect x={x-s} y={y-s} width={s*2} height={s*2} fill={solid ? color : 'var(--bg)'} stroke={color} strokeWidth="1.2"/>;
+    // rounded square with a corner notch
+    const s = r + 0.5;
+    return (
+      <g style={shadow}>
+        <rect x={x-s} y={y-s} width={s*2} height={s*2} rx="1.8" ry="1.8"
+          fill={solid ? color : 'var(--bg-card)'} stroke={color} strokeWidth="1.25"/>
+        <circle cx={x + s*0.45} cy={y - s*0.45} r={s*0.22} fill={color} opacity={solid ? 0.55 : 0.8}/>
+      </g>
+    );
   }
-  if (type === 'fact') return (
-    <g stroke={color} strokeWidth="1.4" strokeLinecap="round">
-      <line x1={x-r} y1={y} x2={x+r} y2={y}/>
-      <line x1={x} y1={y-r} x2={x} y2={y+r}/>
-    </g>
-  );
+  if (type === 'fact') {
+    // plus inside a thin ring
+    return (
+      <g style={shadow}>
+        <circle cx={x} cy={y} r={r + 0.8} fill="var(--bg-card)" stroke={color} strokeWidth="1.1" opacity={solid ? 0.95 : 0.75}/>
+        <g stroke={color} strokeWidth="1.6" strokeLinecap="round">
+          <line x1={x - r*0.7} y1={y} x2={x + r*0.7} y2={y}/>
+          <line x1={x} y1={y - r*0.7} x2={x} y2={y + r*0.7}/>
+        </g>
+      </g>
+    );
+  }
   if (type === 'project') {
+    // hexagon with a tiny inner fleck
     const pts = [];
     for (let i = 0; i < 6; i++) {
       const a = (Math.PI / 3) * i - Math.PI / 6;
-      pts.push(`${x + Math.cos(a) * (r+1)},${y + Math.sin(a) * (r+1)}`);
+      pts.push(`${x + Math.cos(a) * (r+1.4)},${y + Math.sin(a) * (r+1.4)}`);
     }
-    return <polygon points={pts.join(' ')} fill={color} stroke={color} strokeWidth="1.2" opacity={solid ? 1 : .85}/>;
+    return (
+      <g style={shadow}>
+        <polygon points={pts.join(' ')} fill={color} stroke={color} strokeWidth="1.2" opacity={solid ? 1 : 0.88}/>
+        <circle cx={x} cy={y} r={r * 0.35} fill="var(--bg-card)" opacity={solid ? 0.85 : 0.5}/>
+      </g>
+    );
   }
   if (type === 'skill') {
-    const s = r + 1;
-    return <polygon points={`${x},${y-s} ${x+s},${y+s*.8} ${x-s},${y+s*.8}`} fill={solid ? color : 'var(--bg)'} stroke={color} strokeWidth="1.2"/>;
+    // upward triangle with an inner baseline
+    const s = r + 1.5;
+    return (
+      <g style={shadow}>
+        <polygon points={`${x},${y-s} ${x+s*0.95},${y+s*0.82} ${x-s*0.95},${y+s*0.82}`}
+          fill={solid ? color : 'var(--bg-card)'} stroke={color} strokeWidth="1.25"/>
+        <line x1={x - s*0.5} y1={y + s*0.45} x2={x + s*0.5} y2={y + s*0.45}
+          stroke={color} strokeWidth="0.9" opacity={solid ? 0.4 : 0.75}/>
+      </g>
+    );
   }
-  return <circle cx={x} cy={y} r={r} fill={color}/>;
+  return <circle cx={x} cy={y} r={r} fill={color} style={shadow}/>;
 }
 
 function Graph({ width = 900, height = 620, highlightIds = [], recentIds = [], onNodeHover, onNodeClick, selectedId, showLabels = true, variant = 'atlas' }) {
@@ -511,7 +678,7 @@ function Graph({ width = 900, height = 620, highlightIds = [], recentIds = [], o
 // Chat 
 
 function Chat({ onHoverNode, selectedNode, onSelectNode }) {
-  const { convTitle, msgs, streaming, sendChat, stopChat, curatedIds, approval, approveTools, mode, setMode } = useBackend();
+  const { convTitle, msgs, streaming, sendChat, stopChat, curatedIds, approval, approveTools, mode, setMode, providers } = useBackend();
   const [hoveredChip, setHoveredChip] = React.useState(null);
   const [input, setInput] = React.useState('');
   const [attachments, setAttachments] = React.useState([]); // {kind:'file'|'image', name, content?, dataUrl?}
@@ -663,9 +830,17 @@ function Chat({ onHoverNode, selectedNode, onSelectNode }) {
                 </div>
               </header>
 
-              {msgs.map((m, i) => (
-                <Msg key={i} m={m} onHoverChip={setHoveredChip} onClickChip={onSelectNode}/>
-              ))}
+              {msgs.map((m, i) => {
+                const prev = msgs[i - 1];
+                const gap = prev && m.ts && prev.ts ? (m.ts - prev.ts) : 0;
+                const showDivider = gap >= 10 * 60 * 1000;
+                return (
+                  <React.Fragment key={i}>
+                    {showDivider && <TimeDivider ts={m.ts}/>}
+                    <Msg m={m} onHoverChip={setHoveredChip} onClickChip={onSelectNode}/>
+                  </React.Fragment>
+                );
+              })}
 
               {curatedIds.length > 0 && (
                 <div className="traversal-trail">
@@ -698,7 +873,7 @@ function Chat({ onHoverNode, selectedNode, onSelectNode }) {
         </div>
       )}
 
-      <div className="composer">
+      <div className={`composer${streaming ? ' is-streaming' : ''}${input.length > 0 ? ' has-text' : ''}`}>
         {attachments.length > 0 && (
           <div className="composer-attachments">
             {attachments.map((a, i) => (
@@ -724,19 +899,35 @@ function Chat({ onHoverNode, selectedNode, onSelectNode }) {
           rows={1}
         />
         <div className="composer-foot">
+          <ProviderPicker providers={providers}/>
+          <ModelPicker providers={providers}/>
           <div className="mode-switch">
-            {['chat','coder','team'].map(m => (
-              <button key={m} className={mode === m ? 'is-active' : ''} onClick={() => setMode(m)}>{m}</button>
+            {['chat','coder','team'].map((m, i) => (
+              <button
+                key={m}
+                className={mode === m ? 'is-active' : ''}
+                onClick={() => setMode(m)}
+                title={`${m} · ctrl+${i + 1}`}
+              >
+                {m}
+                <span className="mode-hotkey">{i + 1}</span>
+              </button>
             ))}
           </div>
           <div className="composer-spacer"/>
+          <CharCount value={input}/>
           {streaming
             ? <button className="btn btn-danger" style={{height:32}} onClick={stopChat}>stop</button>
-            : <button className="composer-send" onClick={send} title="send · Enter" disabled={!input.trim() && attachments.length === 0}>
-                <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
-                  <path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-              </button>
+            : (
+              <div className="composer-send-wrap">
+                <span className="composer-kbd" aria-hidden>↵</span>
+                <button className="composer-send" onClick={send} title="send · Enter" disabled={!input.trim() && attachments.length === 0}>
+                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                    <path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                </button>
+              </div>
+            )
           }
         </div>
       </div>
@@ -744,16 +935,276 @@ function Chat({ onHoverNode, selectedNode, onSelectNode }) {
   );
 }
 
+// Lightweight markdown renderer. Not full CommonMark - we only care about
+// the subset that shows up in chat: headings, bold, italic, inline code,
+// fenced code, unordered lists, ordered lists, blockquotes, links, rules.
+// Styled in the Quiet Cartography palette so it doesn't read as stock markdown.
+function renderInline(str) {
+  const out = [];
+  let i = 0, key = 0;
+  const push = (node) => out.push(React.cloneElement ? node : node);
+  while (i < str.length) {
+    // code `...`
+    const code = str.slice(i).match(/^`([^`]+)`/);
+    if (code) { out.push(<code key={key++} className="md-ic">{code[1]}</code>); i += code[0].length; continue; }
+    // bold **...**
+    const bold = str.slice(i).match(/^\*\*([^*]+)\*\*/);
+    if (bold) { out.push(<strong key={key++} className="md-b">{renderInline(bold[1])}</strong>); i += bold[0].length; continue; }
+    // italic *...* (not **...**)
+    const em = str.slice(i).match(/^\*([^*\n]+)\*/);
+    if (em) { out.push(<em key={key++} className="md-i">{renderInline(em[1])}</em>); i += em[0].length; continue; }
+    // link [text](url)
+    const link = str.slice(i).match(/^\[([^\]]+)\]\(([^)]+)\)/);
+    if (link) {
+      out.push(<a key={key++} className="md-a" href={link[2]} onClick={e => { e.preventDefault(); window.rook?.openExternal?.(link[2]); }}>{link[1]}</a>);
+      i += link[0].length; continue;
+    }
+    // plain char; batch until the next marker
+    const nextMarker = str.slice(i).search(/[`*\[]/);
+    const take = nextMarker === -1 ? str.length - i : Math.max(1, nextMarker);
+    out.push(str.slice(i, i + take));
+    i += take;
+  }
+  return out;
+}
+
+function MarkdownRender({ text }) {
+  // parse into blocks: fenced code, headings, lists, blockquotes, paragraphs
+  const blocks = [];
+  const lines = (text || '').split('\n');
+  let i = 0, key = 0;
+  while (i < lines.length) {
+    const line = lines[i];
+    // fenced code block
+    const fence = line.match(/^```(\w*)\s*$/);
+    if (fence) {
+      const lang = fence[1] || '';
+      i++;
+      const buf = [];
+      while (i < lines.length && !/^```\s*$/.test(lines[i])) { buf.push(lines[i]); i++; }
+      if (i < lines.length) i++; // skip closing fence
+      blocks.push(
+        <pre key={key++} className="md-pre">
+          {lang && <span className="md-pre-lang">{lang}</span>}
+          <code>{buf.join('\n')}</code>
+        </pre>
+      );
+      continue;
+    }
+    // heading
+    const h = line.match(/^(#{1,4})\s+(.+)$/);
+    if (h) {
+      const level = h[1].length;
+      const Tag = `h${Math.min(level + 1, 6)}`;
+      blocks.push(React.createElement(Tag, { key: key++, className: `md-h md-h${level}` }, renderInline(h[2])));
+      i++; continue;
+    }
+    // blockquote (collect consecutive > lines)
+    if (/^>\s?/.test(line)) {
+      const buf = [];
+      while (i < lines.length && /^>\s?/.test(lines[i])) { buf.push(lines[i].replace(/^>\s?/, '')); i++; }
+      blocks.push(<blockquote key={key++} className="md-bq">{renderInline(buf.join(' '))}</blockquote>);
+      continue;
+    }
+    // horizontal rule
+    if (/^---+\s*$/.test(line)) {
+      blocks.push(<hr key={key++} className="md-hr"/>);
+      i++; continue;
+    }
+    // unordered list
+    if (/^[-*+]\s+/.test(line)) {
+      const items = [];
+      while (i < lines.length && /^[-*+]\s+/.test(lines[i])) {
+        items.push(lines[i].replace(/^[-*+]\s+/, ''));
+        i++;
+      }
+      blocks.push(
+        <ul key={key++} className="md-ul">
+          {items.map((t, k) => <li key={k}><span className="md-bullet">—</span><span>{renderInline(t)}</span></li>)}
+        </ul>
+      );
+      continue;
+    }
+    // ordered list
+    if (/^\d+\.\s+/.test(line)) {
+      const items = [];
+      while (i < lines.length && /^\d+\.\s+/.test(lines[i])) {
+        items.push(lines[i].replace(/^\d+\.\s+/, ''));
+        i++;
+      }
+      blocks.push(
+        <ol key={key++} className="md-ol">
+          {items.map((t, k) => (
+            <li key={k}>
+              <span className="md-num mono">{String(k + 1).padStart(2, '0')}</span>
+              <span>{renderInline(t)}</span>
+            </li>
+          ))}
+        </ol>
+      );
+      continue;
+    }
+    // blank line: skip
+    if (/^\s*$/.test(line)) { i++; continue; }
+    // paragraph: merge with following non-empty, non-special lines
+    const buf = [line];
+    i++;
+    while (i < lines.length && !/^\s*$/.test(lines[i]) && !/^```/.test(lines[i]) && !/^#{1,4}\s/.test(lines[i]) && !/^>/.test(lines[i]) && !/^[-*+]\s/.test(lines[i]) && !/^\d+\.\s/.test(lines[i]) && !/^---+\s*$/.test(lines[i])) {
+      buf.push(lines[i]);
+      i++;
+    }
+    blocks.push(<p key={key++} className="md-p">{renderInline(buf.join(' '))}</p>);
+  }
+  return <div className="md">{blocks}</div>;
+}
+
+// Rough token estimate. 4 chars per token is the industry hand-wave.
+function estimateTokens(s) {
+  return Math.max(1, Math.round((s || '').length / 4));
+}
+
+function TimeDivider({ ts }) {
+  const d = new Date(ts);
+  const label = d.toLocaleTimeString('en', { hour: 'numeric', minute: '2-digit' });
+  return (
+    <div className="time-divider">
+      <span className="time-divider-dot"/>
+      <span className="time-divider-label">{label}</span>
+      <span className="time-divider-dot"/>
+    </div>
+  );
+}
+
+// Composer sub-components: provider picker, model picker, char counter.
+
+function ProviderPicker({ providers }) {
+  const [open, setOpen] = React.useState(false);
+  const ref = React.useRef(null);
+  React.useEffect(() => {
+    if (!open) return;
+    const onDoc = e => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
+  }, [open]);
+  const active = providers.active;
+  const count = providers.state.profiles.length;
+  return (
+    <div className="picker" ref={ref}>
+      <button className={`picker-btn${open ? ' is-open' : ''}`} onClick={() => setOpen(o => !o)} title={`${count} provider${count === 1 ? '' : 's'}`}>
+        <span className="picker-dot" style={{ background: active.apiKey ? 'var(--signal)' : 'var(--ink-4)' }}/>
+        <span className="picker-label">{active.name || 'provider'}</span>
+        <span className="picker-caret">▾</span>
+      </button>
+      {open && (
+        <div className="picker-pop">
+          <div className="picker-pop-head">profiles</div>
+          {providers.state.profiles.map(p => (
+            <button
+              key={p.id}
+              className={`picker-pop-row${p.id === active.id ? ' is-active' : ''}`}
+              onClick={() => { providers.setActive(p.id); setOpen(false); }}
+            >
+              <span className="picker-pop-name">{p.name}</span>
+              <span className="picker-pop-model">{p.model || 'no model'}</span>
+            </button>
+          ))}
+          <div className="picker-pop-foot">
+            <span style={{color:'var(--ink-4)'}}>manage in Settings → Providers</span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ModelPicker({ providers }) {
+  const [open, setOpen] = React.useState(false);
+  const [loading, setLoading] = React.useState(false);
+  const ref = React.useRef(null);
+  React.useEffect(() => {
+    if (!open) return;
+    const onDoc = e => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
+  }, [open]);
+  const active = providers.active;
+  const models = active.models || [];
+  const needsRefresh = models.length === 0 || (Date.now() - (active.lastFetched || 0)) > 24 * 60 * 60 * 1000;
+  const refresh = async () => {
+    setLoading(true);
+    await providers.refreshModels(active.id);
+    setLoading(false);
+  };
+  React.useEffect(() => {
+    if (open && needsRefresh && !loading && active.apiKey) refresh();
+  }, [open]);
+  return (
+    <div className="picker picker-model" ref={ref}>
+      <button className={`picker-btn picker-btn-mono${open ? ' is-open' : ''}`} onClick={() => setOpen(o => !o)}>
+        <span className="picker-label">{active.model || 'pick model'}</span>
+        <span className="picker-caret">▾</span>
+      </button>
+      {open && (
+        <div className="picker-pop picker-pop-wide">
+          <div className="picker-pop-head">
+            models · {active.name}
+            <button className="picker-refresh" onClick={refresh} disabled={loading} title="refetch /models">
+              {loading ? '↻' : '↺'}
+            </button>
+          </div>
+          <div className="picker-pop-scroll">
+            {models.length === 0 && (
+              <div className="picker-pop-empty">
+                {active.apiKey ? 'no models cached. hit refresh.' : 'add an api key to list models.'}
+              </div>
+            )}
+            {models.map(m => (
+              <button
+                key={m}
+                className={`picker-pop-row${m === active.model ? ' is-active' : ''}`}
+                onClick={() => { providers.setActiveModel(m); setOpen(false); }}
+              >
+                <span className="picker-pop-model mono">{m}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CharCount({ value }) {
+  const len = value.length;
+  if (len < 2000) return null;
+  const pct = Math.min(1, len / 16000);
+  const cls = pct >= 1 ? 'is-red' : pct >= 0.8 ? 'is-amber' : '';
+  return <span className={`char-count ${cls}`}>{len.toLocaleString()}</span>;
+}
+
 function Msg({ m, onHoverChip, onClickChip }) {
   const isUser = m.role === 'user';
+  const body = isUser ? (
+    // user messages render plain, preserving their exact typing
+    <div className="msg-text-plain">{m.text}</div>
+  ) : (
+    <div className="msg-text">
+      <MarkdownRender text={m.text}/>
+      {m._streaming && <span className="msg-caret" aria-hidden/>}
+    </div>
+  );
   return (
     <div className={`msg msg-${m.role}`}>
       <div className={`msg-tag ${isUser ? 'msg-tag-user' : 'msg-tag-assistant'}`}>
         {isUser ? 'you' : 'rook'}
       </div>
-      <div className={`msg-text${m._streaming ? ' msg-cursor' : ''}`}>
-        {m.text}
-      </div>
+      {body}
+      {!isUser && !m._streaming && m.text && (
+        <div className="msg-meta">
+          ~{estimateTokens(m.text).toLocaleString()} tok
+          {m.model && <> <span className="msg-meta-dot">·</span> {m.model}</>}
+        </div>
+      )}
     </div>
   );
 }
@@ -788,6 +1239,7 @@ function MapHUD({ hoveredId, selectedId, onNodeHover, onNodeClick }) {
   return (
     <div className="hud">
       <div className="hud-head">
+        <KeyButton/>
         <span className="heartbeat"/>
         <strong>memory</strong>
         <span className="sp"/>
@@ -829,13 +1281,48 @@ function MapHUD({ hoveredId, selectedId, onNodeHover, onNodeClick }) {
         </div>
       ) : (
         <div className="hud-foot">
-          <span className="h-item"><span className="h-dot" style={{background:'var(--node-person)'}}/>person</span>
-          <span className="h-item"><span className="h-dot" style={{background:'var(--node-thing)'}}/>thing</span>
-          <span className="h-item"><span className="h-dot" style={{background:'var(--node-project)'}}/>project</span>
+          <span className="h-meta">hover <kbd className="hud-kbd">?</kbd> for key</span>
           <span className="sp"/>
           <span className="h-meta">live</span>
         </div>
       )}
+    </div>
+  );
+}
+
+// Tiny legend popover. Hovering the ? in the memory pane shows the glyph
+// for every node type and its label, using the same renderGlyph the graph
+// draws with. Stays honest: if a type renders as a hexagon in the graph,
+// that's exactly what you see here.
+const KEY_TYPES = [
+  { t: 'person',  label: 'person',  color: 'var(--node-person)'  },
+  { t: 'place',   label: 'place',   color: 'var(--node-place)'   },
+  { t: 'thing',   label: 'thing / tool', color: 'var(--node-thing)' },
+  { t: 'fact',    label: 'fact',    color: 'var(--node-fact)'    },
+  { t: 'project', label: 'project', color: 'var(--node-project)' },
+  { t: 'skill',   label: 'skill',   color: 'var(--node-skill)'   },
+];
+
+function KeyButton() {
+  return (
+    <div className="hud-key-wrap">
+      <button className="hud-key-btn" aria-label="legend">?</button>
+      <div className="hud-key-pop" role="tooltip">
+        <div className="hud-key-head">node legend</div>
+        <div className="hud-key-grid">
+          {KEY_TYPES.map(k => (
+            <div key={k.t} className="hud-key-row">
+              <svg width="22" height="22" viewBox="-11 -11 22 22" className="hud-key-glyph">
+                {renderGlyph(k.t, 0, 0, 6, k.color, false)}
+              </svg>
+              <span className="hud-key-label">{k.label}</span>
+            </div>
+          ))}
+        </div>
+        <div className="hud-key-foot">
+          <span><span className="hud-key-sig"/> live / recent</span>
+        </div>
+      </div>
     </div>
   );
 }
@@ -1044,30 +1531,14 @@ function Skills() {
 // Settings 
 
 function Settings() {
-  const { saveSettings } = useBackend();
-  const [section, setSection] = React.useState('llm');
-  const [apiBase, setApiBase] = React.useState('');
-  const [apiKey,  setApiKey]  = React.useState('');
-  const [model,   setModel]   = React.useState('');
-  const [reveal,  setReveal]  = React.useState(false);
+  const { saveSettings, providers } = useBackend();
+  const [section, setSection] = React.useState('providers');
   const [saved,   setSaved]   = React.useState(false);
   const [temp,    setTemp]    = React.useState(0.7);
   const [sys,     setSys]     = React.useState('you are rook. local-first. cite memory as node ids. no em dashes. no AI attribution. be dry.');
 
-  React.useEffect(() => {
-    if (!window.rook) return;
-    window.rook.getPlatformUrl().then(v => v && setApiBase(v)).catch(() => {});
-    window.rook.getPlatformApiKey().then(v => v && setApiKey(v)).catch(() => {});
-  }, []);
-
-  const doSave = () => {
-    saveSettings({ apiUrl: apiBase, apiKey, model });
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
-  };
-
   const sections = [
-    { k: 'llm',        n: '01', label: 'Model'     },
+    { k: 'providers',  n: '01', label: 'Providers' },
     { k: 'memory',     n: '02', label: 'Memory'    },
     { k: 'approvals',  n: '03', label: 'Approvals' },
     { k: 'appearance', n: '04', label: 'Appearance'},
@@ -1086,39 +1557,7 @@ function Settings() {
       </nav>
 
       <div className="set-body">
-        {section === 'llm' && (
-          <>
-            <div className="set-head">
-              <div className="set-head-kick">settings</div>
-              <h1 className="set-head-title">Model</h1>
-              <p className="set-head-sub">Any OpenAI-compatible endpoint or local Ollama. Keys stored in <code>%APPDATA%/Rook/.env</code> and never leave the machine.</p>
-            </div>
-            <SetRow label="API base" hint="OpenAI-compatible">
-              <input className="set-input" value={apiBase} onChange={e => setApiBase(e.target.value)} placeholder="https://api.openai.com/v1"/>
-            </SetRow>
-            <SetRow label="API key" hint="stored locally">
-              <div className="set-secret">
-                <input className="set-input" type={reveal ? 'text' : 'password'} value={apiKey} onChange={e => setApiKey(e.target.value)} placeholder="sk-…"/>
-                <button onClick={() => setReveal(!reveal)}>{reveal ? 'hide' : 'show'}</button>
-              </div>
-            </SetRow>
-            <SetRow label="Model" hint="name or tag">
-              <input className="set-input" value={model} onChange={e => setModel(e.target.value)} placeholder="claude-haiku-4-5"/>
-            </SetRow>
-            <SetRow label="System prompt" hint="prepended to every turn" wide>
-              <textarea className="set-textarea" value={sys} onChange={e => setSys(e.target.value)} rows={4}/>
-            </SetRow>
-            <SetRow label="Temperature" hint={temp.toFixed(2)}>
-              <input type="range" min="0" max="2" step=".05" value={temp} onChange={e => setTemp(+e.target.value)} className="set-range"/>
-            </SetRow>
-            <div className="set-footer">
-              {saved
-                ? <span className="set-saved">saved</span>
-                : <span className="set-footer-note">changes apply on save</span>}
-              <button className="btn btn-solid" onClick={doSave}>save</button>
-            </div>
-          </>
-        )}
+        {section === 'providers' && <ProvidersSection providers={providers} temp={temp} setTemp={setTemp} sys={sys} setSys={setSys}/>}
 
         {section === 'memory' && (
           <>
@@ -1201,6 +1640,163 @@ function Settings() {
   );
 }
 
+function ProvidersSection({ providers, temp, setTemp, sys, setSys }) {
+  const [editingId, setEditingId] = React.useState(null);
+  const [testState, setTestState] = React.useState({}); // id -> 'ok'|'fail'|'busy'
+
+  const startNew = () => {
+    const prof = {
+      id: uid(),
+      name: 'New profile',
+      baseUrl: 'https://api.openai.com/v1',
+      apiKey: '',
+      model: '',
+      models: [],
+      lastFetched: 0,
+    };
+    providers.upsert(prof);
+    setEditingId(prof.id);
+  };
+
+  const test = async (p) => {
+    setTestState(s => ({ ...s, [p.id]: 'busy' }));
+    const models = await providers.refreshModels(p.id);
+    setTestState(s => ({ ...s, [p.id]: models && models.length > 0 ? 'ok' : 'fail' }));
+    setTimeout(() => setTestState(s => { const n = { ...s }; delete n[p.id]; return n; }), 3000);
+  };
+
+  const editing = providers.state.profiles.find(p => p.id === editingId);
+
+  return (
+    <>
+      <div className="set-head">
+        <div className="set-head-kick">settings</div>
+        <h1 className="set-head-title">Providers</h1>
+        <p className="set-head-sub">
+          Stack as many OpenAI-compatible endpoints as you want. Each profile keeps its own
+          base URL, key, and preferred model. Pick one per turn from the composer.
+          Keys live in localStorage, never leave the machine.
+        </p>
+      </div>
+
+      <div className="prov-list">
+        {providers.state.profiles.map(p => {
+          const isActive = providers.active.id === p.id;
+          const isEditing = editingId === p.id;
+          const ts = testState[p.id];
+          return (
+            <article key={p.id} className={`prov-card${isActive ? ' is-active' : ''}${isEditing ? ' is-editing' : ''}`}>
+              <div className="prov-card-head">
+                <button
+                  className={`prov-radio${isActive ? ' is-on' : ''}`}
+                  onClick={() => providers.setActive(p.id)}
+                  title={isActive ? 'active' : 'set active'}
+                >
+                  <span className="prov-radio-dot"/>
+                </button>
+                <div className="prov-card-title">
+                  <div className="prov-card-name">{p.name || 'untitled'}</div>
+                  <div className="prov-card-meta mono">
+                    {(p.baseUrl || '—').replace(/^https?:\/\//, '')}
+                    {p.model && <> <span className="prov-card-dot">·</span> {p.model}</>}
+                    {p.models && p.models.length > 0 && <> <span className="prov-card-dot">·</span> {p.models.length} models</>}
+                  </div>
+                </div>
+                <div className="prov-card-actions">
+                  {ts === 'busy' && <span className="prov-test prov-test-busy">testing…</span>}
+                  {ts === 'ok'   && <span className="prov-test prov-test-ok">connected</span>}
+                  {ts === 'fail' && <span className="prov-test prov-test-fail">failed</span>}
+                  <button className="btn-ghost" onClick={() => test(p)}>test</button>
+                  <button className="btn-ghost" onClick={() => setEditingId(isEditing ? null : p.id)}>{isEditing ? 'done' : 'edit'}</button>
+                  {providers.state.profiles.length > 1 && (
+                    <button className="btn-ghost btn-ghost-danger" onClick={() => { providers.remove(p.id); if (isEditing) setEditingId(null); }}>
+                      remove
+                    </button>
+                  )}
+                </div>
+              </div>
+              {isEditing && <ProviderEditor profile={p} providers={providers} onClose={() => setEditingId(null)}/>}
+            </article>
+          );
+        })}
+        <button className="prov-add" onClick={startNew}>
+          <span className="prov-add-plus">+</span> new profile
+        </button>
+      </div>
+
+      <div className="set-head" style={{marginTop: 28}}>
+        <h2 className="set-sub-title">Chat defaults</h2>
+      </div>
+      <SetRow label="System prompt" hint="prepended to every turn" wide>
+        <textarea className="set-textarea" value={sys} onChange={e => setSys(e.target.value)} rows={4}/>
+      </SetRow>
+      <SetRow label="Temperature" hint={temp.toFixed(2)}>
+        <input type="range" min="0" max="2" step=".05" value={temp} onChange={e => setTemp(+e.target.value)} className="set-range"/>
+      </SetRow>
+    </>
+  );
+}
+
+function ProviderEditor({ profile, providers, onClose }) {
+  const [name, setName]     = React.useState(profile.name || '');
+  const [base, setBase]     = React.useState(profile.baseUrl || '');
+  const [key, setKey]       = React.useState(profile.apiKey || '');
+  const [model, setModel]   = React.useState(profile.model || '');
+  const [reveal, setReveal] = React.useState(false);
+  const [loading, setLoading] = React.useState(false);
+  const models = profile.models || [];
+
+  const commit = (patch) => providers.upsert({ ...profile, ...patch });
+
+  const pullModels = async () => {
+    commit({ name, baseUrl: base, apiKey: key });
+    setLoading(true);
+    await providers.refreshModels(profile.id);
+    setLoading(false);
+  };
+
+  return (
+    <div className="prov-editor">
+      <SetRow label="Label" hint="your name for it">
+        <input className="set-input" value={name}
+          onChange={e => { setName(e.target.value); commit({ name: e.target.value }); }}
+          placeholder="Anthropic, OpenAI, Local Ollama…"/>
+      </SetRow>
+      <SetRow label="Base URL" hint="OpenAI-compatible">
+        <input className="set-input" value={base}
+          onChange={e => { setBase(e.target.value); commit({ baseUrl: e.target.value }); }}
+          placeholder="https://api.openai.com/v1"/>
+      </SetRow>
+      <SetRow label="API key" hint="stored locally">
+        <div className="set-secret">
+          <input className="set-input" type={reveal ? 'text' : 'password'} value={key}
+            onChange={e => { setKey(e.target.value); commit({ apiKey: e.target.value }); }}
+            placeholder="sk-…"/>
+          <button onClick={() => setReveal(!reveal)}>{reveal ? 'hide' : 'show'}</button>
+        </div>
+      </SetRow>
+      <SetRow label="Model" hint={models.length > 0 ? `${models.length} cached` : 'pull to list'}>
+        <div className="prov-model-row">
+          {models.length > 0 ? (
+            <select className="set-input" value={model}
+              onChange={e => { setModel(e.target.value); commit({ model: e.target.value }); }}>
+              <option value="">— pick a model —</option>
+              {models.map(m => <option key={m} value={m}>{m}</option>)}
+            </select>
+          ) : (
+            <input className="set-input" value={model}
+              onChange={e => { setModel(e.target.value); commit({ model: e.target.value }); }}
+              placeholder="claude-haiku-4-5 / gpt-4.1-mini / llama3.1"/>
+          )}
+          <button className="btn-ghost" onClick={pullModels} disabled={loading || !base}>
+            {loading ? 'pulling…' : 'pull models'}
+          </button>
+        </div>
+      </SetRow>
+    </div>
+  );
+}
+
 function SetRow({ label, hint, children, wide }) {
   return (
     <div className={`set-row${wide ? ' is-wide' : ''}`}>
@@ -1240,7 +1836,7 @@ function TweaksPanel({ open, onClose, tweaks, setTweaks }) {
   return (
     <div className="tweaks-panel">
       <div className="tweaks-head">
-        <span className="tweaks-title">Customizes</span>
+        <span className="tweaks-title">Customizies</span>
         <button className="tweaks-close" onClick={onClose}>×</button>
       </div>
       <div className="tw-row">
@@ -1463,7 +2059,7 @@ function App() {
                 <path d="M10.3 10.3L14 14" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
               </svg>
             </button>
-            <button className="iconpill" title="customizes" onClick={() => setTweaksOpen(o => !o)}>
+            <button className="iconpill" title="customizies" onClick={() => setTweaksOpen(o => !o)}>
               <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
                 <circle cx="8" cy="8" r="1.5" fill="currentColor"/>
                 <circle cx="3" cy="8" r="1.5" fill="currentColor"/>
