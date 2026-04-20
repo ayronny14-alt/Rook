@@ -893,16 +893,7 @@ function Chat({ onHoverNode, selectedNode, onSelectNode }) {
 
       <div className="chat-fade"/>
 
-      {approval && (
-        <div className="approval-bar">
-          <span>{approval.tool_name || 'tool'} - approve?</span>
-          <span style={{fontSize:12,color:'var(--ink-4)',flex:1,marginLeft:8,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
-            {approval.description || ''}
-          </span>
-          <button className="btn btn-solid" onClick={() => approveTools(true)}>allow</button>
-          <button className="btn btn-danger" onClick={() => approveTools(false)}>deny</button>
-        </div>
-      )}
+      {approval && <ApprovalPanel approval={approval} approveTools={approveTools}/>}
 
       <div className={`composer${streaming ? ' is-streaming' : ''}${input.length > 0 ? ' has-text' : ''}`}>
         {attachments.length > 0 && (
@@ -1094,6 +1085,114 @@ function estimateTokens(s) {
   return Math.max(1, Math.round((s || '').length / 4));
 }
 
+// Backend emits tool calls inline as [[TOOL:name:json-args]] inside the
+// streaming text. Ugly raw. split the text into segments so we can render
+// pills alongside markdown blocks without breaking either.
+function splitToolSegments(text) {
+  const out = [];
+  if (!text) return out;
+  const re = /\[\[TOOL:([^:\]]+):([\s\S]*?)\]\]/g;
+  let last = 0;
+  let m;
+  while ((m = re.exec(text)) !== null) {
+    if (m.index > last) {
+      out.push({ kind: 'text', text: text.slice(last, m.index) });
+    }
+    let args = null;
+    try { args = JSON.parse(m[2]); } catch (_) { args = m[2]; }
+    out.push({ kind: 'tool', name: m[1], args });
+    last = re.lastIndex;
+  }
+  if (last < text.length) {
+    out.push({ kind: 'text', text: text.slice(last) });
+  }
+  return out;
+}
+
+// Summarize a tool's args into a short subtitle that reads naturally.
+function summarizeToolArgs(name, args) {
+  if (!args || typeof args !== 'object') return '';
+  // pick the most identifying field per tool
+  const pick = (...keys) => {
+    for (const k of keys) {
+      if (args[k] && typeof args[k] === 'string') return args[k];
+    }
+    return null;
+  };
+  const path    = pick('path', 'file_path', 'file');
+  const url     = pick('url');
+  const query   = pick('query', 'search', 'q');
+  const command = pick('command', 'cmd');
+  const pattern = pick('pattern', 'regex');
+  return path || url || query || command || pattern || '';
+}
+
+// Approval panel. Renders above the composer when the backend has pending
+// destructive tool calls waiting on user consent. Shows every diff and
+// lets you allow or deny the batch. Previously this read the wrong fields
+// off the approval payload and silently showed "tool - approve?".
+function ApprovalPanel({ approval, approveTools }) {
+  const diffs = Array.isArray(approval?.diffs) ? approval.diffs : [];
+  const first = diffs[0] || {};
+  const title = diffs.length > 1
+    ? `${diffs.length} pending changes`
+    : (first.tool_name || 'tool call');
+  return (
+    <div className="approval-panel">
+      <div className="approval-panel-head">
+        <span className="approval-panel-dot"/>
+        <span className="approval-panel-title">{title}</span>
+        {first.path && diffs.length === 1 && (
+          <span className="approval-panel-path mono">{first.path}</span>
+        )}
+        <span className="approval-panel-sp"/>
+        <button className="approval-btn approval-btn-deny" onClick={() => approveTools(false)}>deny</button>
+        <button className="approval-btn approval-btn-allow" onClick={() => approveTools(true)}>allow</button>
+      </div>
+      {diffs.length > 0 && (
+        <div className="approval-panel-body">
+          {diffs.map((d, i) => (
+            <div key={i} className="approval-diff">
+              {diffs.length > 1 && (
+                <div className="approval-diff-head mono">
+                  <span className="approval-diff-tool">{d.tool_name || 'tool'}</span>
+                  {d.path && <span className="approval-diff-path">{d.path}</span>}
+                </div>
+              )}
+              {d.diff
+                ? <pre className="approval-diff-body mono">{d.diff}</pre>
+                : d.args && <pre className="approval-diff-args mono">{JSON.stringify(d.args, null, 2)}</pre>}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ToolPill({ name, args, streaming }) {
+  const [open, setOpen] = React.useState(false);
+  const subtitle = summarizeToolArgs(name, args);
+  return (
+    <div className={`tool-pill${streaming ? ' tool-pill-live' : ''}`}>
+      <button
+        className="tool-pill-head"
+        onClick={() => setOpen(o => !o)}
+        title={open ? 'collapse' : 'expand args'}
+      >
+        <span className="tool-pill-dot"/>
+        <span className="tool-pill-name">{name}</span>
+        {subtitle && <span className="tool-pill-sub mono">{subtitle}</span>}
+        {streaming && <span className="tool-pill-spin"/>}
+        <span className="tool-pill-caret">{open ? '▴' : '▾'}</span>
+      </button>
+      {open && (
+        <pre className="tool-pill-args mono">{JSON.stringify(args, null, 2)}</pre>
+      )}
+    </div>
+  );
+}
+
 function TimeDivider({ ts }) {
   const d = new Date(ts);
   const label = d.toLocaleTimeString('en', { hour: 'numeric', minute: '2-digit' });
@@ -1215,13 +1314,27 @@ function CharCount({ value }) {
 
 function Msg({ m, onHoverChip, onClickChip }) {
   const isUser = m.role === 'user';
+  // split assistant turns so inline [[TOOL:...]] markers render as pills
+  // instead of raw text. user turns stay as-is.
+  const segments = isUser ? null : splitToolSegments(m.text);
+  const lastIdx = segments ? segments.length - 1 : -1;
   const body = isUser ? (
-    // user messages render plain, preserving their exact typing
     <div className="msg-text-plain">{m.text}</div>
   ) : (
     <div className="msg-text">
-      <MarkdownRender text={m.text}/>
-      {m._streaming && <span className="msg-caret" aria-hidden/>}
+      {segments.map((seg, i) => {
+        if (seg.kind === 'tool') {
+          // the most recent tool pill is "live" if we're still streaming
+          // and it's the final segment so far.
+          const live = m._streaming && i === lastIdx;
+          return <ToolPill key={i} name={seg.name} args={seg.args} streaming={live}/>;
+        }
+        if (!seg.text.trim()) return null;
+        return <MarkdownRender key={i} text={seg.text}/>;
+      })}
+      {m._streaming && (lastIdx < 0 || segments[lastIdx].kind !== 'tool') && (
+        <span className="msg-caret" aria-hidden/>
+      )}
     </div>
   );
   return (

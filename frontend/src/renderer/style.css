@@ -1230,3 +1230,153 @@ button { cursor: pointer; }
   border-bottom-color: rgba(198,68,68,0.3);
 }
 .update-banner-error .update-banner-dot { background: #c64444; box-shadow: 0 0 8px rgba(198,68,68,0.4); }
+
+/* Tool pill: inline marker in assistant messages showing a tool call. */
+.tool-pill {
+  margin: 8px 0;
+  border: 1px solid var(--line-2);
+  border-radius: 8px;
+  background: var(--bg-soft);
+  overflow: hidden;
+  transition: border-color var(--dur) var(--ease), background var(--dur) var(--ease);
+}
+.tool-pill:hover { border-color: color-mix(in oklab, var(--ink-4) 50%, var(--line-2)); }
+.tool-pill-live {
+  border-color: var(--signal-edge);
+  background: color-mix(in oklab, var(--signal) 6%, var(--bg-soft));
+}
+.tool-pill-head {
+  display: flex; align-items: center; gap: 10px;
+  width: 100%; padding: 8px 12px;
+  background: transparent; text-align: left;
+  transition: background var(--dur) var(--ease);
+}
+.tool-pill-head:hover { background: color-mix(in oklab, var(--ink) 4%, transparent); }
+.tool-pill-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--ink-4); flex-shrink: 0;
+}
+.tool-pill-live .tool-pill-dot {
+  background: var(--signal);
+  box-shadow: 0 0 6px color-mix(in oklab, var(--signal) 60%, transparent);
+}
+.tool-pill-name {
+  font-family: var(--fs-mono); font-size: 11px;
+  letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--ink); font-weight: 500;
+}
+.tool-pill-sub {
+  font-size: 11.5px; color: var(--ink-3);
+  flex: 1; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  letter-spacing: 0;
+}
+.tool-pill-spin {
+  width: 10px; height: 10px; border-radius: 50%;
+  border: 1.5px solid var(--signal-edge);
+  border-top-color: var(--signal);
+  animation: tool-spin 0.9s linear infinite;
+  flex-shrink: 0;
+}
+@keyframes tool-spin { to { transform: rotate(360deg); } }
+.tool-pill-caret {
+  font-size: 9px; color: var(--ink-4);
+  margin-left: auto;
+}
+.tool-pill-args {
+  margin: 0; padding: 10px 14px;
+  border-top: 1px dashed var(--line-2);
+  background: var(--bg-sink);
+  color: var(--ink-2); font-size: 11.5px; line-height: 1.55;
+  max-height: 300px; overflow: auto;
+  white-space: pre-wrap; word-break: break-word;
+}
+
+/* Approval panel: proper, not a thin strip. */
+.approval-panel {
+  position: relative;
+  width: 100%; max-width: 640px;
+  margin: 0 auto 12px;
+  background: var(--bg-card);
+  border: 1px solid color-mix(in oklab, #c48a2a 35%, var(--line-2));
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 8px 20px -10px rgba(196, 138, 42, 0.22);
+  animation: approval-in 220ms var(--ease-out) both;
+}
+@keyframes approval-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+.approval-panel-head {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 14px;
+  background: color-mix(in oklab, #f5b000 9%, var(--bg-card));
+  border-bottom: 1px solid var(--line);
+}
+.approval-panel-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: #c48a2a;
+  box-shadow: 0 0 8px rgba(245, 176, 0, 0.5);
+  animation: approval-pulse 1.6s ease-in-out infinite;
+  flex-shrink: 0;
+}
+@keyframes approval-pulse {
+  0%, 100% { opacity: 0.9; }
+  50% { opacity: 0.45; }
+}
+.approval-panel-title {
+  font-family: var(--fs-display); font-style: italic;
+  font-size: 16px; color: var(--ink);
+}
+.approval-panel-path {
+  font-size: 11px; color: var(--ink-3);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  min-width: 0; flex: 1;
+}
+.approval-panel-sp { flex: 1; }
+.approval-btn {
+  font-family: var(--fs-mono); font-size: 10.5px;
+  letter-spacing: 0.08em; text-transform: uppercase;
+  padding: 5px 14px; border-radius: 999px;
+  transition: all var(--dur) var(--ease);
+}
+.approval-btn-allow {
+  background: var(--ink); color: var(--bg);
+}
+.approval-btn-allow:hover { background: var(--ink-2); transform: translateY(-1px); }
+.approval-btn-deny {
+  background: transparent; color: var(--ink-3);
+  border: 1px solid var(--line-2);
+}
+.approval-btn-deny:hover { color: #c64444; border-color: rgba(198, 68, 68, 0.5); background: rgba(198, 68, 68, 0.06); }
+.approval-panel-body {
+  max-height: 320px; overflow-y: auto;
+  padding: 10px 14px;
+}
+.approval-diff { margin-bottom: 8px; }
+.approval-diff:last-child { margin-bottom: 0; }
+.approval-diff-head {
+  display: flex; align-items: baseline; gap: 10px;
+  font-size: 10.5px; color: var(--ink-4);
+  letter-spacing: 0.04em; text-transform: uppercase;
+  margin-bottom: 4px;
+}
+.approval-diff-tool { color: var(--ink-2); }
+.approval-diff-path { color: var(--ink-3); font-size: 10px; letter-spacing: 0; text-transform: none; }
+.approval-diff-body,
+.approval-diff-args {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg-sink);
+  font-size: 11.5px; line-height: 1.55;
+  color: var(--ink-2);
+  max-height: 240px; overflow: auto;
+  white-space: pre;
+}
+/* tint diff lines by prefix - classic git colors, muted */
+.approval-diff-body {
+  white-space: pre;
+}
