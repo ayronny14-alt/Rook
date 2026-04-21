@@ -2484,7 +2484,7 @@ dependencies = [
 
 [[package]]
 name = "rook-backend"
-version = "0.1.9"
+version = "2.0.0"
 dependencies = [
  "anyhow",
  "arboard",

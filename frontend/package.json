@@ -1,6 +1,6 @@
 {
   "name": "rook",
-  "version": "0.1.9",
+  "version": "2.0.0",
   "description": "Rook AI Assistant - Electron frontend",
   "main": "src/main.js",
   "scripts": {

@@ -1,6 +1,6 @@
 {
   "name": "rook-workspace",
-  "version": "0.1.9",
+  "version": "2.0.0",
   "description": "Rook - unified Electron + Rust workspace root",
   "private": true,
   "scripts": {
