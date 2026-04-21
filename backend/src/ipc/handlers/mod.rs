@@ -5,6 +5,7 @@ pub mod git;
 pub mod memory;
 pub mod plugins;
 pub mod scheduler;
+pub mod tool_dispatch;
 pub mod tools;
 
 use std::collections::HashMap;

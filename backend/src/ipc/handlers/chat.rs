@@ -2117,6 +2117,49 @@ fn resolve_conv_path(conv_id: &str, path: &str) -> std::path::PathBuf {
     }
 }
 
+/// Walk `root` looking for any source file we know how to talk to over LSP.
+/// Used when semantic.symbol is called without a hint - we need SOMETHING to
+/// know which language server to wake up.
+fn find_any_source_file(root: &std::path::Path) -> Option<std::path::PathBuf> {
+    fn walk(dir: &std::path::Path, depth: usize) -> Option<std::path::PathBuf> {
+        if depth > 4 {
+            return None;
+        }
+        let entries = std::fs::read_dir(dir).ok()?;
+        for ent in entries.flatten() {
+            let p = ent.path();
+            let name = p.file_name().and_then(|n| n.to_str()).unwrap_or("");
+            // skip common vendor/build dirs - they slow us down for no gain
+            if matches!(
+                name,
+                "node_modules"
+                    | "target"
+                    | ".git"
+                    | "dist"
+                    | "build"
+                    | "__pycache__"
+                    | ".venv"
+                    | "venv"
+            ) {
+                continue;
+            }
+            if p.is_file() {
+                if let Some(ext) = p.extension().and_then(|e| e.to_str()) {
+                    if matches!(ext, "rs" | "ts" | "tsx" | "js" | "jsx" | "py") {
+                        return Some(p);
+                    }
+                }
+            } else if p.is_dir() {
+                if let Some(hit) = walk(&p, depth + 1) {
+                    return Some(hit);
+                }
+            }
+        }
+        None
+    }
+    walk(root, 0)
+}
+
 /// Built-in regex grep - walks files under `root`, applies regex, returns
 /// file paths / lines / counts.  Pure Rust, no external ripgrep needed.
 fn run_builtin_grep(
@@ -2647,6 +2690,14 @@ pub async fn execute_tool(
     stream_tx: Option<tokio::sync::mpsc::Sender<IPCResponse>>,
     stream_id: &str,
 ) -> String {
+    // consolidated tools (git, ui, fs_read, ...) get rewritten to their leaf handler
+    // name here. unknown op / missing op returns a usage string the LLM can act on.
+    let rewritten: Option<String> = match super::tool_dispatch::dispatch(name, args) {
+        Err(usage) => return usage,
+        Ok(opt) => opt,
+    };
+    let name: &str = rewritten.as_deref().unwrap_or(name);
+
     let s = |key: &str| args.get(key).and_then(|v| v.as_str()).unwrap_or("");
     match name {
         "search_memory" => {
@@ -3348,6 +3399,71 @@ pub async fn execute_tool(
                 .hover(&abs.display().to_string(), line, character)
                 .unwrap_or_else(|e| format!("LSP error: {}", e))
         }
+        "semantic_rename" => {
+            let path = s("path");
+            let new_name = s("new_name");
+            let line = args.get("line").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
+            let character = args.get("character").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
+            if path.is_empty() {
+                return "Error: path is required".to_string();
+            }
+            if new_name.is_empty() {
+                return "Error: new_name is required".to_string();
+            }
+            let abs = resolve_conv_path(conv_id, path);
+            let abs_str = abs.display().to_string();
+            // snapshot the entry file first so file_undo works. cross-file edits
+            // under an LSP rename aren't caught by the per-file snapshot net yet,
+            // so the LLM should verify with git diff afterward.
+            snapshot_file(conv_id, &abs_str);
+            tools
+                .lsp
+                .rename(&abs_str, line, character, new_name)
+                .unwrap_or_else(|e| format!("LSP rename error: {}", e))
+        }
+        "semantic_code_actions" => {
+            let path = s("path");
+            let line = args.get("line").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
+            let character = args.get("character").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
+            if path.is_empty() {
+                return "Error: path is required".to_string();
+            }
+            let abs = resolve_conv_path(conv_id, path);
+            tools
+                .lsp
+                .code_actions(&abs.display().to_string(), line, character)
+                .unwrap_or_else(|e| format!("LSP code_actions error: {}", e))
+        }
+        "semantic_apply_action" => {
+            let id = s("id");
+            if id.is_empty() {
+                return "Error: id is required (from a recent code_actions response)".to_string();
+            }
+            tools
+                .lsp
+                .apply_code_action(id)
+                .unwrap_or_else(|e| format!("LSP apply_action error: {}", e))
+        }
+        "semantic_workspace_symbol" => {
+            let query = s("query");
+            if query.is_empty() {
+                return "Error: query is required".to_string();
+            }
+            // need a file path hint so we know which LSP session to ask.
+            // default: any file inside the conversation cwd.
+            let hint = s("hint_path");
+            let hint_path = if hint.is_empty() {
+                // scan cwd for a first .rs/.ts/.py/.go/.js we find
+                let cwd = get_session_cwd(conv_id);
+                find_any_source_file(&cwd).unwrap_or_else(|| cwd.join("src/main.rs"))
+            } else {
+                resolve_conv_path(conv_id, hint)
+            };
+            tools
+                .lsp
+                .workspace_symbol(&hint_path.display().to_string(), query)
+                .unwrap_or_else(|e| format!("LSP workspace_symbol error: {}", e))
+        }
         "git_commit" => {
             let message = s("message");
             if message.is_empty() {
@@ -3698,334 +3814,5 @@ fn is_trivial_query(message: &str) -> bool {
 }
 
 fn build_all_tools() -> Vec<crate::llm::types::ToolDefinition> {
-    use crate::llm::types::{FunctionDefinition, ToolDefinition};
-    let tool = |name: &str, description: &str, params: serde_json::Value| ToolDefinition {
-        tool_type: "function".to_string(),
-        function: FunctionDefinition {
-            name: name.to_string(),
-            description: description.to_string(),
-            parameters: params,
-        },
-    };
-    vec![
-        tool("search_memory", "Search the long-term memory graph for relevant facts, decisions, files, or conversations. Use this BEFORE asking the user to repeat themselves or when you need context from earlier sessions. Returns top-N ranked memory nodes with title, summary, and confidence. Far cheaper than loading the full context packet.", serde_json::json!({
-            "type": "object",
-            "properties": {
-                "query": {"type":"string","description":"Natural-language query describing what you need to recall."},
-                "limit": {"type":"integer","description":"Max nodes to return. Default 5."}
-            },
-            "required": ["query"]
-        })),
-
-        // -------- computer use (DOM-style) --------
-        tool("ui_snapshot", "Snapshot the accessibility tree of the foreground window (or a named one). Returns a JSON tree with stable element ids you can pass to ui_click / ui_type. Call this BEFORE every click so your ids match the current screen. Response also includes your last 8 UI actions so you remember what you already did.", serde_json::json!({
-            "type": "object",
-            "properties": {
-                "window": {"type":"string","description":"Optional substring of a window title (e.g. 'Notepad'). Omit to snapshot the foreground window."},
-                "include_offscreen": {"type":"boolean","description":"Include elements scrolled off screen. Default false to keep tokens low."}
-            }
-        })),
-        tool("ui_click", "Click an element by id from the most recent ui_snapshot. Uses UIA's Invoke pattern when available (more reliable than synthetic mouse).", serde_json::json!({
-            "type": "object",
-            "properties": { "element_id": {"type":"string","description":"ID from the most recent ui_snapshot (e.g. 'e42')."} },
-            "required": ["element_id"]
-        })),
-        tool("ui_type", "Type text into an element by id (typically an edit/value control). Prefers the Value pattern, falls back to keyboard simulation with focus.", serde_json::json!({
-            "type": "object",
-            "properties": {
-                "element_id": {"type":"string"},
-                "text": {"type":"string"}
-            },
-            "required": ["element_id","text"]
-        })),
-        tool("ui_focus_window", "Bring a window to the foreground by title substring. Snapshot again after focusing to get a fresh tree.", serde_json::json!({
-            "type": "object",
-            "properties": { "title": {"type":"string","description":"Substring match on window title."} },
-            "required": ["title"]
-        })),
-        tool("ui_find", "Search the most recent snapshot's registry for elements whose name contains the query. Useful when you want to click 'the OK button' without knowing the id.", serde_json::json!({
-            "type": "object",
-            "properties": { "query": {"type":"string"} },
-            "required": ["query"]
-        })),
-
-        // -------- scheduler --------
-        tool("propose_schedule", "Propose a scheduled task for the user to approve. Use when you think Rook should wake up later and do something (e.g. 'every monday summarize PRs'). Cadence grammar: 'once YYYY-MM-DD HH:MM', 'in 2h', 'daily 09:00', 'weekly mon 09:00', 'every 15m', 'cron 0 9 * * 1'. Status starts as 'proposed' - user must approve before it fires.", serde_json::json!({
-            "type": "object",
-            "properties": {
-                "name": {"type":"string","description":"Short human-readable name."},
-                "cadence": {"type":"string","description":"Cadence spec - see tool description."},
-                "prompt": {"type":"string","description":"What Rook should do when the task fires."},
-                "output_channel": {"type":"string","enum":["notification","silent"],"description":"How to deliver the result. Default notification."},
-                "why": {"type":"string","description":"Short reason the task is useful. Shown to the user when they approve."}
-            },
-            "required": ["name","cadence","prompt"]
-        })),
-        tool("list_schedules", "List all non-archived scheduled tasks. Returns JSON array with id, name, cadence, next_run_at, status.", serde_json::json!({
-            "type": "object", "properties": {}
-        })),
-        tool("cancel_schedule", "Archive a scheduled task by id so it stops firing.", serde_json::json!({
-            "type": "object",
-            "properties": { "id": {"type":"string"} },
-            "required": ["id"]
-        })),
-        tool("file_read", "Read the contents of a file. Returns content with line numbers in 'NNNN\\tcontent' format so you can reference exact lines in edits. Defaults to first 2000 lines; use offset/limit for windows of larger files.", serde_json::json!({
-            "type": "object",
-            "properties": {
-                "path":   {"type":"string","description":"Absolute or relative file path"},
-                "offset": {"type":"integer","description":"0-based line number to start at"},
-                "limit":  {"type":"integer","description":"Max lines to return (default 2000)"}
-            },
-            "required": ["path"]
-        })),
-        tool("list_files", "List files and directories in a directory. Returns a JSON-like listing with name, type (file|dir), and size. Use this before reading files so you know what exists. Defaults to current working directory.", serde_json::json!({
-            "type": "object",
-            "properties": {
-                "path": {"type":"string","description":"Directory to list. Defaults to '.'"},
-                "recursive": {"type":"boolean","description":"Walk subdirectories (max depth 3). Default false."},
-                "pattern": {"type":"string","description":"Optional glob-like substring filter on entry names"}
-            }
-        })),
-        tool("change_dir", "Change the working directory. Affects subsequent terminal_execute, file_read, file_write, and list_files calls that use relative paths. Returns the new absolute cwd.", serde_json::json!({
-            "type": "object",
-            "properties": { "path": {"type":"string","description":"Target directory (absolute or relative)"} },
-            "required": ["path"]
-        })),
-        tool("get_cwd", "Return the current working directory as an absolute path.", serde_json::json!({ "type": "object", "properties": {} })),
-        tool("glob", "Find files by glob pattern (e.g. 'src/**/*.rs', '**/*.toml'). Returns matching file paths sorted by modification time. Faster than list_files for finding specific file types in large trees.", serde_json::json!({
-            "type": "object",
-            "properties": {
-                "pattern": {"type":"string","description":"Glob pattern, e.g. 'src/**/*.ts'"},
-                "path": {"type":"string","description":"Optional base directory (default: cwd)"}
-            },
-            "required": ["pattern"]
-        })),
-        tool("grep", "Search file contents using ripgrep semantics. Use this BEFORE file_read to locate the relevant lines. Returns matching files (default) or matching lines with file:line:content.", serde_json::json!({
-            "type": "object",
-            "properties": {
-                "pattern": {"type":"string","description":"Regex pattern"},
-                "path": {"type":"string","description":"Directory or file to search (default: cwd)"},
-                "glob": {"type":"string","description":"Optional glob filter, e.g. '*.rs'"},
-                "output": {"type":"string","enum":["files","content","count"],"description":"files=just paths (default), content=matching lines, count=match counts per file"},
-                "case_insensitive": {"type":"boolean"},
-                "max_results": {"type":"integer","description":"Cap results (default 200)"}
-            },
-            "required": ["pattern"]
-        })),
-        tool("todo_write", "Create or update the task list. Use ONLY for complex tasks with 3+ distinct steps - NOT for simple or single-step work. Pass the COMPLETE list each time (replaces previous). Each item: { content (imperative), activeForm (present continuous), status (pending|in_progress|completed) }. Keep exactly ONE task in_progress. Mark completed IMMEDIATELY after finishing.", serde_json::json!({
-            "type": "object",
-            "properties": {
-                "todos": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "content": {"type":"string","description":"Imperative form, e.g. 'Run tests'"},
-                            "activeForm": {"type":"string","description":"Present continuous, e.g. 'Running tests'"},
-                            "status": {"type":"string","enum":["pending","in_progress","completed"]}
-                        },
-                        "required": ["content","activeForm","status"]
-                    }
-                }
-            },
-            "required": ["todos"]
-        })),
-        tool("file_write", "Write content to a file, creating it if it doesn't exist.", serde_json::json!({
-            "type": "object",
-            "properties": {
-                "path": {"type":"string"},
-                "content": {"type":"string"}
-            },
-            "required": ["path","content"]
-        })),
-        tool("code_edit", "Edit a file. Actions: search_replace, insert_at_line, append.", serde_json::json!({
-            "type": "object",
-            "properties": {
-                "action": {"type":"string","enum":["search_replace","insert_at_line","append"]},
-                "path": {"type":"string"},
-                "line": {"type":"integer","description":"Line number for insert_at_line"},
-                "content": {"type":"string","description":"Content for append or insert_at_line"},
-                "search": {"type":"string","description":"Text to find for search_replace"},
-                "replace": {"type":"string","description":"Replacement text for search_replace"}
-            },
-            "required": ["action","path"]
-        })),
-        tool("terminal_execute", "Run a shell command and return stdout+stderr. Use for builds, tests, installs, etc.", serde_json::json!({
-            "type": "object",
-            "properties": { "command": {"type":"string"} },
-            "required": ["command"]
-        })),
-        tool("git_status", "Show git status of the workspace.", serde_json::json!({ "type": "object", "properties": {} })),
-        tool("git_diff", "Show git diff. Optionally for a specific file.", serde_json::json!({
-            "type": "object",
-            "properties": { "file": {"type":"string","description":"Optional file path"} }
-        })),
-        tool("git_log", "Show recent git commits.", serde_json::json!({
-            "type": "object",
-            "properties": { "count": {"type":"integer","description":"Number of commits (default 10)"} }
-        })),
-        tool("git_branch", "List git branches and show current branch.", serde_json::json!({ "type": "object", "properties": {} })),
-        tool("git_commit", "Stage files and create a git commit. Only commit when the user asks. Provide a concise message describing the change.", serde_json::json!({
-            "type": "object",
-            "properties": {
-                "message": {"type":"string","description":"Commit message"},
-                "files": {"type":"array","items":{"type":"string"},"description":"Files to stage (relative or absolute paths). Use [\".\"] to stage all changes."}
-            },
-            "required": ["message","files"]
-        })),
-        tool("web_search", "Search the web using DuckDuckGo. Returns titles, URLs, and snippets.", serde_json::json!({
-            "type": "object",
-            "properties": { "query": {"type":"string"} },
-            "required": ["query"]
-        })),
-        tool("fetch_url", "Fetch and extract text content from a URL.", serde_json::json!({
-            "type": "object",
-            "properties": { "url": {"type":"string"} },
-            "required": ["url"]
-        })),
-        tool("browser_navigate", "Open a URL in the headless browser and return page text.", serde_json::json!({
-            "type": "object",
-            "properties": { "url": {"type":"string"} },
-            "required": ["url"]
-        })),
-        tool("browser_click", "Click a CSS selector in the browser.", serde_json::json!({
-            "type": "object",
-            "properties": { "selector": {"type":"string"} },
-            "required": ["selector"]
-        })),
-        tool("browser_type", "Type text into a form element matched by CSS selector.", serde_json::json!({
-            "type": "object",
-            "properties": {
-                "selector": {"type":"string"},
-                "text": {"type":"string"}
-            },
-            "required": ["selector","text"]
-        })),
-        tool("browser_evaluate", "Evaluate JavaScript in the browser and return the result.", serde_json::json!({
-            "type": "object",
-            "properties": { "js": {"type":"string"} },
-            "required": ["js"]
-        })),
-        tool("browser_screenshot", "Take a screenshot of the current browser page. Returns base64 PNG.", serde_json::json!({
-            "type": "object",
-            "properties": { "full_page": {"type":"boolean","description":"Capture full scrollable page"} }
-        })),
-        tool("store_memory", "Store a piece of information in long-term memory for future retrieval.", serde_json::json!({
-            "type": "object",
-            "properties": {
-                "content": {"type":"string","description":"The information to remember"},
-                "category": {"type":"string","description":"Category tag (e.g. 'project', 'decision', 'architecture', 'bug', 'preference')"}
-            },
-            "required": ["content"]
-        })),
-        tool("store_user_fact", "Store or update a fact about the user in the global profile.", serde_json::json!({
-            "type": "object",
-            "properties": {
-                "key": {"type":"string","description":"Fact key (e.g. 'name', 'preferred_language', 'editor', 'timezone')"},
-                "value": {"type":"string","description":"Fact value"}
-            },
-            "required": ["key","value"]
-        })),
-        tool("shell_spawn", "Create a new named persistent shell (e.g. 'shell2', 'build', 'server'). The shell keeps its own cwd and env across multiple shell_exec calls. If a shell with the same name already exists, returns an error - kill it first with shell_kill. Use this when you need a SECOND shell separate from the default (e.g. running a dev server in the background while you work in another shell).", serde_json::json!({
-            "type": "object",
-            "properties": {
-                "name": {"type":"string","description":"Shell name, e.g. 'shell2'"}
-            },
-            "required": ["name"]
-        })),
-        tool("shell_exec", "Run a command in a specific named shell. cwd persists across calls. Set run_in_background=true for commands you want to keep running while you do other work (dev servers, log watchers, etc) - the tool returns immediately and you fetch output later with shell_read. Set timeout_secs for synchronous calls (default 45s).", serde_json::json!({
-            "type": "object",
-            "properties": {
-                "shell": {"type":"string","description":"Shell name (default: 'default'). Auto-creates if missing."},
-                "command": {"type":"string","description":"Shell command to execute"},
-                "run_in_background": {"type":"boolean","description":"Start command in background and return immediately"},
-                "timeout_secs": {"type":"integer","description":"Override default 45s timeout for sync calls"}
-            },
-            "required": ["command"]
-        })),
-        tool("shell_read", "Read accumulated output from a shell's background process + buffer. Use after starting a background command with shell_exec to check its progress.", serde_json::json!({
-            "type": "object",
-            "properties": {
-                "shell": {"type":"string","description":"Shell name (default: 'default')"},
-                "clear": {"type":"boolean","description":"Clear the buffer after reading"}
-            }
-        })),
-        tool("shell_kill", "Terminate a named shell and its background process. Use when you're done with a dev server or want to reclaim a shell name.", serde_json::json!({
-            "type": "object",
-            "properties": {
-                "name": {"type":"string","description":"Shell name to kill"}
-            },
-            "required": ["name"]
-        })),
-        tool("shell_list", "List all active shells with their cwd, background state, and buffer size.", serde_json::json!({
-            "type": "object",
-            "properties": {}
-        })),
-        tool("outline_file", "Return a symbolic outline of a source file - function names, class names, imports - with their line numbers. Much cheaper than file_read when you only need to understand a file's structure for navigation. Supports Rust, JS, TS, Python, Go.", serde_json::json!({
-            "type": "object",
-            "properties": {
-                "path": {"type":"string","description":"Path to source file"}
-            },
-            "required": ["path"]
-        })),
-        tool("search_in_file", "Search for a regex pattern within a single file and return matching lines with surrounding context. Use this instead of grep when you already know which file to search.", serde_json::json!({
-            "type": "object",
-            "properties": {
-                "path": {"type":"string","description":"File to search"},
-                "pattern": {"type":"string","description":"Regex pattern"},
-                "context": {"type":"integer","description":"Lines of context around each match (default 2)"},
-                "case_insensitive": {"type":"boolean"}
-            },
-            "required": ["path","pattern"]
-        })),
-        tool("file_diff", "Show a unified diff of what's changed in a file since the first read/edit in THIS conversation. Use this to verify what your edits actually did.", serde_json::json!({
-            "type": "object",
-            "properties": {
-                "path": {"type":"string","description":"File to diff"}
-            },
-            "required": ["path"]
-        })),
-        tool("file_undo", "Restore a file to its state from the start of this conversation (from the snapshot taken on first read/edit). Use when an edit went wrong.", serde_json::json!({
-            "type": "object",
-            "properties": {
-                "path": {"type":"string","description":"File to restore"}
-            },
-            "required": ["path"]
-        })),
-        tool("lsp_definition", "Go to the definition of the symbol at a given line and column. Returns the file path and line number of the definition. Requires a language server (rust-analyzer, typescript-language-server, pylsp) on PATH.", serde_json::json!({
-            "type": "object",
-            "properties": {
-                "path": {"type":"string","description":"Source file path"},
-                "line": {"type":"integer","description":"0-based line number"},
-                "character": {"type":"integer","description":"0-based column number"}
-            },
-            "required": ["path","line","character"]
-        })),
-        tool("lsp_references", "Find all references to the symbol at a given position. Returns file:line:col for each reference.", serde_json::json!({
-            "type": "object",
-            "properties": {
-                "path": {"type":"string","description":"Source file path"},
-                "line": {"type":"integer","description":"0-based line number"},
-                "character": {"type":"integer","description":"0-based column number"}
-            },
-            "required": ["path","line","character"]
-        })),
-        tool("lsp_hover", "Get type information and documentation for the symbol at a given position.", serde_json::json!({
-            "type": "object",
-            "properties": {
-                "path": {"type":"string","description":"Source file path"},
-                "line": {"type":"integer","description":"0-based line number"},
-                "character": {"type":"integer","description":"0-based column number"}
-            },
-            "required": ["path","line","character"]
-        })),
-        tool("apply_patch", "Apply a unified diff patch to a file. Pass the file path and the patch text in standard unified diff format (@@-hunk style). Snapshots the file first so file_undo still works. Use this instead of code_edit when you have a pre-computed diff.", serde_json::json!({
-            "type": "object",
-            "properties": {
-                "path":  {"type":"string","description":"File to patch"},
-                "patch": {"type":"string","description":"Unified diff text (@@-hunk format, optionally with --- +++ header)"}
-            },
-            "required": ["path","patch"]
-        })),
-    ]
+    super::tool_dispatch::build_tools()
 }
