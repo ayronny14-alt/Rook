@@ -404,7 +404,7 @@ fn usage_error(t: &Tool, problem: &str) -> String {
     }
     s.push_str("example: {\"op\":\"");
     s.push_str(t.ops[0].op);
-    s.push_str("\"");
+    s.push('"');
     for r in t.ops[0].required {
         s.push_str(", \"");
         s.push_str(r);

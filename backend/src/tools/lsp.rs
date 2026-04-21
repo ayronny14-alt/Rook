@@ -561,7 +561,7 @@ impl LspManager {
         if let Some(edit) = resolved.get("edit") {
             drop(sessions);
             let applied = apply_workspace_edit(edit, &cached.title)?;
-            summary.push_str("\n");
+            summary.push('\n');
             summary.push_str(&applied);
             sessions = self.sessions.lock().map_err(|e| anyhow::anyhow!("{}", e))?;
         }
@@ -569,7 +569,7 @@ impl LspManager {
         // 2. Command to execute
         if let Some(cmd) = resolved
             .get("command")
-            .or_else(|| Some(&resolved))
+            .or(Some(&resolved))
             .filter(|v| v.get("command").is_some())
         {
             let session = sessions.get_mut(cached.lang.as_str()).unwrap();
@@ -780,7 +780,7 @@ fn apply_text_edits(source: &str, edits: &[Value]) -> Result<String> {
         byte_edits.push((start, end, new_text));
     }
     // sort by start desc so we can splice without adjusting offsets
-    byte_edits.sort_by(|a, b| b.0.cmp(&a.0));
+    byte_edits.sort_by_key(|b| std::cmp::Reverse(b.0));
 
     let mut out = source.to_string();
     for (start, end, new_text) in byte_edits {
@@ -831,6 +831,39 @@ fn lsp_position_to_offset(source: &str, pos: Option<&Value>) -> Result<usize> {
     }
     // line past EOF: clamp to source length (e.g. append-at-end edits)
     Ok(source.len())
+}
+
+fn format_location_result(result: &Value) -> String {
+    if result.is_null() {
+        return "No results found.".to_string();
+    }
+
+    let locations = if result.is_array() {
+        result.as_array().unwrap().clone()
+    } else {
+        vec![result.clone()]
+    };
+
+    if locations.is_empty() {
+        return "No results found.".to_string();
+    }
+
+    let mut out = String::new();
+    for loc in &locations {
+        let uri = loc.get("uri").and_then(|v| v.as_str()).unwrap_or("?");
+        let range = loc.get("range").and_then(|r| r.get("start"));
+        let line = range
+            .and_then(|r| r.get("line"))
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0);
+        let col = range
+            .and_then(|r| r.get("character"))
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0);
+        let path = uri.strip_prefix("file:///").unwrap_or(uri);
+        out.push_str(&format!("{}:{}:{}\n", path, line + 1, col + 1));
+    }
+    out
 }
 
 #[cfg(test)]
@@ -903,37 +936,4 @@ mod applier_tests {
         assert_eq!(symbol_kind_name(5), "Class");
         assert_eq!(symbol_kind_name(999), "?");
     }
-}
-
-fn format_location_result(result: &Value) -> String {
-    if result.is_null() {
-        return "No results found.".to_string();
-    }
-
-    let locations = if result.is_array() {
-        result.as_array().unwrap().clone()
-    } else {
-        vec![result.clone()]
-    };
-
-    if locations.is_empty() {
-        return "No results found.".to_string();
-    }
-
-    let mut out = String::new();
-    for loc in &locations {
-        let uri = loc.get("uri").and_then(|v| v.as_str()).unwrap_or("?");
-        let range = loc.get("range").and_then(|r| r.get("start"));
-        let line = range
-            .and_then(|r| r.get("line"))
-            .and_then(|v| v.as_u64())
-            .unwrap_or(0);
-        let col = range
-            .and_then(|r| r.get("character"))
-            .and_then(|v| v.as_u64())
-            .unwrap_or(0);
-        let path = uri.strip_prefix("file:///").unwrap_or(uri);
-        out.push_str(&format!("{}:{}:{}\n", path, line + 1, col + 1));
-    }
-    out
 }
